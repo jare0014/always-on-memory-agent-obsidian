@@ -438,7 +438,7 @@ class MemoryAgent:
 
     async def run(self, message: str, runner: Runner) -> str:
         session = await self.session_service.create_session(
-            app_name="memory_layer", user_id="agent",
+            app_name=runner.app_name, user_id="agent",
         )
         content = types.Content(role="user", parts=[types.Part.from_text(text=message)])
         return await self._execute(session, content, runner)
@@ -446,7 +446,7 @@ class MemoryAgent:
     async def run_multimodal(self, text: str, file_bytes: bytes, mime_type: str, runner: Runner) -> str:
         """Send a multimodal message with both text and a media file."""
         session = await self.session_service.create_session(
-            app_name="memory_layer", user_id="agent",
+            app_name=runner.app_name, user_id="agent",
         )
         parts = [
             types.Part.from_text(text=text),
