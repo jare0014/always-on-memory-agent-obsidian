@@ -668,7 +668,10 @@ def main():
             task.cancel()
 
     for sig in (signal.SIGINT, signal.SIGTERM):
-        loop.add_signal_handler(sig, shutdown, sig)
+        try:
+            loop.add_signal_handler(sig, shutdown, sig)
+        except NotImplementedError:
+            pass
 
     try:
         loop.run_until_complete(main_async(args))
