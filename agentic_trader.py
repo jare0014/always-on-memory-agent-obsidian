@@ -73,6 +73,29 @@ def calculate_rvol(bars: List[Dict], lookback: int = 10) -> float:
     avg_vol = sum(hist_vols[-lookback:]) / len(hist_vols[-lookback:])
     return round(curr_vol / avg_vol, 2) if avg_vol > 0 else 1.0
 
+def calculate_momentum_score(quote: Dict) -> float:
+    """
+    Calculates a momentum score based on intraday movement vs previous close.
+    Higher score indicates strong dip-buy opportunity or active breakout.
+    """
+    quote_data = quote.get("quote", quote)
+    last_price = float(quote_data.get("last_trade_price", 0))
+    prev_close = float(quote_data.get("adjusted_previous_close", last_price))
+    
+    if prev_close <= 0:
+        return 0.0
+        
+    change_pct = ((last_price - prev_close) / prev_close) * 100.0
+    
+    # Calculate bid-ask spread percentage
+    bid = float(quote_data.get("bid_price", 0) or 0)
+    ask = float(quote_data.get("ask_price", 0) or 0)
+    spread_pct = ((ask - bid) / last_price * 100.0) if last_price > 0 and ask > bid else 0.1
+    
+    # Net Score: Higher score for positive momentum with tight spread
+    score = change_pct - (spread_pct * 2.0)
+    return round(score, 2)
+
 def evaluate_paper_strategy_resonance(symbol: str, bars: List[Dict], quote: Dict) -> Dict:
     """
     Evaluates 5-Minute Multi-Dimensional Momentum Resonance (Setup 1: Breakout, Setup 2: VWAP Bounce, Setup 3: Parabolic Fade).
