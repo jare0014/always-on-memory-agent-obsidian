@@ -340,7 +340,7 @@ def build_agents():
             "For PDFs: extract and summarize the document content.\n\n"
             "Use the full description as raw_text in store_memory so the context is preserved.\n"
             "Always call store_memory. Be concise and accurate.\n"
-            "After storing, confirm what was stored in one sentence."
+            "CRITICAL: Call the store_memory tool EXACTLY ONCE. Do not call it repeatedly. Once you receive the tool response showing the memory has been stored, output a single confirmation sentence and finish."
         ),
         tools=[store_memory],
     )
@@ -357,7 +357,8 @@ def build_agents():
             "4. Create a synthesized summary and one key insight\n"
             "5. Call store_consolidation with source_ids, summary, insight, and connections\n\n"
             "Connections: list of dicts with 'from_id', 'to_id', 'relationship' keys.\n"
-            "Think deeply about cross-cutting patterns."
+            "Think deeply about cross-cutting patterns.\n"
+            "CRITICAL: Call the store_consolidation tool EXACTLY ONCE. Do not call it repeatedly. Once you receive the tool response showing consolidation was stored, stop and finish."
         ),
         tools=[read_unconsolidated_memories, store_consolidation],
     )
