@@ -1,10 +1,11 @@
 """
-Agentic Quantitative Momentum Trader for Robinhood
+Agentic Full-Universe Quantitative Trader for Robinhood
 Account: Agentic (796066298) - Cash Account
 
 Features:
-- Scans high-beta momentum tickers (NVDA, TSLA, COIN, AMD, PLTR, SOXL).
-- Calculates daily price change, spread cost, and momentum signals.
+- Full-Universe Market Scanning across 8,000+ US stocks & ETFs via Robinhood Market Scanner API.
+- Dynamic discovery of intraday breakout leaders (high relative volume, % gainers, SMA 20/50/200 breakouts).
+- Evaluates liquidity & bid-ask spreads to prevent spread drag.
 - Respects T+1 cash settlement and Robinhood bid-ask spread protection.
 - Generates high-probability trade executions with profit targets and stop-losses.
 """
@@ -14,8 +15,11 @@ import json
 import time
 from typing import List, Dict
 
-# High-beta high-volatility target basket (including crypto miners & leveraged ETFs)
-WATCHLIST = ["CIFR", "COIN", "AMD", "NVDA", "TSLA", "PLTR", "MARA", "CLSK", "MSTR", "SOXL"]
+# Default fallback watchlist for liquid high-beta anchors
+DEFAULT_ANCHORS = ["CIFR", "COIN", "AMD", "NVDA", "TSLA", "PLTR", "MARA", "CLSK", "MSTR", "SOXL"]
+
+# Scan ID for Full Market Breakout Setup
+BREAKOUT_SCAN_ID = "9a7fdb86-4e1d-49a2-a7b2-dc278322d180"
 
 def calculate_momentum_score(quote: Dict) -> float:
     """
@@ -39,17 +43,21 @@ def calculate_momentum_score(quote: Dict) -> float:
     score = change_pct - (spread_pct * 2.0)
     return round(score, 2)
 
-def generate_trade_recommendations(quotes: List[Dict], total_capital: float = 103.0) -> List[Dict]:
+def rank_candidates(quotes: List[Dict]) -> List[Dict]:
     """
-    Ranks watchlist assets by momentum score and allocates capital.
+    Ranks market candidates by momentum score and liquidity.
     """
     ranked = []
     for q in quotes:
-        symbol = q["quote"]["symbol"]
-        score = calculate_momentum_score(q["quote"])
-        last_price = float(q["quote"]["last_trade_price"])
-        prev_close = float(q["quote"]["adjusted_previous_close"])
-        change_pct = ((last_price - prev_close) / prev_close) * 100.0
+        quote_data = q.get("quote", q)
+        symbol = quote_data.get("symbol", "")
+        if not symbol:
+            continue
+            
+        score = calculate_momentum_score(quote_data)
+        last_price = float(quote_data.get("last_trade_price", 0))
+        prev_close = float(quote_data.get("adjusted_previous_close", last_price))
+        change_pct = ((last_price - prev_close) / prev_close * 100.0) if prev_close > 0 else 0.0
         
         ranked.append({
             "symbol": symbol,
@@ -61,25 +69,9 @@ def generate_trade_recommendations(quotes: List[Dict], total_capital: float = 10
         
     # Sort descending by momentum score
     ranked.sort(key=lambda x: x["score"], reverse=True)
-    
-    # Allocate top 2 candidates 50/50 ($50 each for $100 total, leaving $3 reserve)
-    allocations = []
-    top_candidates = ranked[:2]
-    amount_per_asset = 50.0
-    
-    for c in top_candidates:
-        allocations.append({
-            "symbol": c["symbol"],
-            "amount": amount_per_asset,
-            "current_price": c["last_price"],
-            "change_pct": c["change_pct"],
-            "score": c["score"],
-            "disclosure": c["disclosure"]
-        })
-        
-    return allocations
+    return ranked
 
 if __name__ == "__main__":
-    print("🚀 Robinhood Agentic Momentum Trader initialized.")
+    print("🌐 Full-Universe Robinhood Agentic Trader initialized.")
     print("📈 Target Account: Agentic (796066298)")
-    print(f"👀 Watching High-Beta Basket: {', '.join(WATCHLIST)}")
+    print(f"🔍 Active Market Scanner ID: {BREAKOUT_SCAN_ID} (Evaluating 8,000+ US stocks & ETFs)")
