@@ -102,3 +102,11 @@ if __name__ == "__main__":
     print("📈 Target Account: Agentic (796066298)")
     print(f"📦 Intraday Data Lake: market_datalake.db")
     print(f"🔍 Active Full-Market Scanner ID: {BREAKOUT_SCAN_ID} (Mandatory 8,000+ US stock & ETF scan)")
+    
+    try:
+        sync_to_quant.sync_datalakes()
+        print("✅ Auto-synced Data Lake to Quant project.")
+    except Exception as e:
+        print(f"Sync note: {e}")
+        
+    print("🤖 Fully Autonomous Headless Trader cycle completed successfully.")
