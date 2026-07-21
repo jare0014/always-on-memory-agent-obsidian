@@ -1,138 +1,230 @@
-# Generative AI on Google Cloud
+<p align="center">
+  <img src="docs/gemini_flash_lite_agent_banner.jpeg" alt="Always-On Agent Memory Layer" width="100%">
+</p>
 
-> **[Gemini Enterprise Agent Platform](https://docs.cloud.google.com/gemini-enterprise-agent-platform)**, the latest evolution of Vertex AI, has been released!
->
-> Check out the [`Google-Cloud-AI/agent-platform`](https://goo.gle/agent-platform-github) repository for a curated list of assets for agent building on Google Cloud.
+# Always On Memory Agent
 
-<!-- markdownlint-disable MD033 -->
+**An always-on AI memory agent built with [Google ADK](https://google.github.io/adk-docs/) + Gemini 3.1 Flash-Lite**
 
-This repository contains notebooks, code samples, sample apps, and other resources that demonstrate how to use, develop and manage generative AI workflows using [Generative AI](https://cloud.google.com/ai/generative-ai) with [Agent Platform](https://docs.cloud.google.com/gemini-enterprise-agent-platform).
+Most AI agents have amnesia. They process information when asked, then forget everything. This project gives agents a persistent, evolving memory that runs 24/7 as a lightweight background process, continuously processing, consolidating, and connecting information.
 
-## Intro Video
+No vector database. No embeddings. Just an LLM that reads, thinks, and writes structured memory.
 
-[![What is Gemini Enterprise Agent Platform?](https://img.youtube.com/vi/j8qW5poBkEU/maxresdefault.jpg)](https://goo.gle/agent-platform-video)
+## The Problem
 
-<table>
-  <tr>
-    <th></th>
-    <th style="text-align: center;">Description</th>
-  </tr>
-  <tr>
-    <td>
-      <img src="https://storage.googleapis.com/github-repo/img/gemini/Spark__Gradient_Alpha_100px.gif" width="45px" alt="Gemini">
-      <br>
-      <a href="gemini/"><code>gemini/</code></a>
-    </td>
-    <td>
-      Discover Gemini through starter notebooks, use cases, function calling, sample apps, and more.
-    </td>
-  </tr>
-  <tr>
-    <td>
-      <img src="https://www.gstatic.com/images/branding/gcpiconscolors/service_discovery/v1/24px.svg" width="40px" alt="Search">
-      <br>
-      <a href="search/"><code>search/</code></a>
-    </td>
-    <td>Use this folder if you're interested in using <a href="https://cloud.google.com/enterprise-search">Agent Search</a>, a Google-managed solution to help you rapidly build search engines for websites and across enterprise data. (Formerly known as Enterprise Search on Generative AI App Builder).</td>
-  </tr>
-  <tr>
-    <td>
-      <img src="https://fonts.gstatic.com/s/i/short-term/release/googlesymbols/nature_people/default/40px.svg" alt="RAG Grounding">
-      <br>
-      <a href="rag-grounding/"><code>rag-grounding/</code></a>
-    </td>
-    <td>Use this folder for information on Retrieval Augmented Generation (RAG) and Grounding. This is an index of notebooks and samples across other directories focused on this topic.</td>
-  </tr>
-  <tr>
-    <td>
-      <img src="https://fonts.gstatic.com/s/i/short-term/release/googlesymbols/image/default/40px.svg" alt="Vision">
-      <br>
-      <a href="vision/"><code>vision/</code></a>
-    </td>
-    <td>
-      Use this folder if you're interested in building your own solutions from scratch using features from Imagen and Veo.
-    </td>
-  </tr>
-  <tr>
-    <td>
-      <img src="https://fonts.gstatic.com/s/i/short-term/release/googlesymbols/mic/default/40px.svg" alt="Speech">
-      <br>
-      <a href="audio/"><code>audio/</code></a>
-    </td>
-    <td>
-      Use this folder if you're interested in building your own solutions from scratch using features from Chirp, a version of Google's Universal Speech Model (USM).
-    </td>
-  </tr>
-  <tr>
-    <td>
-      <img src="https://fonts.gstatic.com/s/i/short-term/release/googlesymbols/build/default/40px.svg" alt="Setup Env">
-      <br>
-      <a href="setup-env/"><code>setup-env/</code></a>
-    </td>
-    <td>Instructions on how to set up Google Cloud, the Gen AI Python SDK, and notebook environments on Google Colab and Workbench.</td>
-  </tr>
-  <tr>
-    <td>
-      <img src="https://fonts.gstatic.com/s/i/short-term/release/googlesymbols/media_link/default/40px.svg" alt="Resources">
-      <br>
-      <a href="RESOURCES.md"><code>RESOURCES.md</code></a>
-    </td>
-    <td>Learning resources (e.g. blogs, YouTube playlists) about Generative AI on Google Cloud.</td>
-  </tr>
-</table>
-<!-- markdownlint-enable MD033 -->
+Current approaches to LLM memory fall short:
 
-## Related Repositories
+| Approach | Limitation |
+|---|---|
+| **Vector DB + RAG** | Passive. Embeds once, retrieves later. No active processing. |
+| **Conversation summary** | Loses detail over time. No cross-reference. |
+| **Knowledge graphs** | Expensive to build and maintain. |
 
-- ✨ [Agent Development Kit (ADK) Samples](https://github.com/google/adk-samples): This repository provides ready-to-use agents built on top of the Agent Development Kit, designed to accelerate your development process. These agents cover a range of common use cases and complexities, from simple conversational bots to complex multi-agent workflows.
-- [🚀 Agent Starter Pack](https://github.com/GoogleCloudPlatform/agent-starter-pack)
-  - A collection of production-ready Generative AI Agent templates built for Google Cloud.
-  - It accelerates development by providing a holistic, production-ready solution, addressing common challenges (Deployment & Operations, Evaluation, Customization, Observability) in building and deploying Gen AI agents.
-- [Gemini Cookbook](https://github.com/google-gemini/cookbook/)
-- [genai-factory](https://github.com/googleCloudPlatform/genai-factory) - A collection of end-to-end infrastructure blueprints to deploy generative AI infrastructures in GCP, using IaC and following security best-practices.
-- [Google Cloud Applied AI Engineering](https://github.com/GoogleCloudPlatform/applied-ai-engineering-samples)
-- [Vertex AI GenMedia Creative Studio](https://github.com/GoogleCloudPlatform/vertex-ai-creative-studio) - Experience Google's generative media foundational models + custom workflows.
-- [MCP Servers for GenMedia](https://goo.gle/vertex-genmedia-mcp) - Empower your agents with generative media tools.
-- [Generative AI for Marketing using Google Cloud](https://github.com/GoogleCloudPlatform/genai-for-marketing)
-- [Generative AI for Developer Productivity](https://github.com/GoogleCloudPlatform/genai-for-developers)
-- Vertex AI Core
-  - [Vertex AI Samples](https://github.com/GoogleCloudPlatform/vertex-ai-samples)
-  - [MLOps with Vertex AI](https://github.com/GoogleCloudPlatform/mlops-with-vertex-ai)
-  - [Developing NLP solutions with T5X and Vertex AI](https://github.com/GoogleCloudPlatform/t5x-on-vertex-ai)
-  - [AlphaFold batch inference with Vertex AI Pipelines](https://github.com/GoogleCloudPlatform/vertex-ai-alphafold-inference-pipeline)
-  - [Serving Spark ML models using Vertex AI](https://github.com/GoogleCloudPlatform/vertex-ai-spark-ml-serving)
-  - [Sensitive Data Protection (Cloud DLP) for Vertex AI Generative Models (PaLM2)](https://github.com/GoogleCloudPlatform/Sensitive-Data-Protection-for-Vertex-AI-PaLM2)
-- Conversational AI
-  - [Contact Center AI Samples](https://github.com/GoogleCloudPlatform/contact-center-ai-samples)
-  - [Reimagining Customer Experience 360](https://github.com/GoogleCloudPlatform/dialogflow-ccai-omnichannel)
-- Document AI
-  - [Document AI Samples](https://github.com/GoogleCloudPlatform/document-ai-samples)
-- Gemini in Google Cloud
-  - [Cymbal Superstore](https://github.com/GoogleCloudPlatform/cymbal-superstore)
-- Cloud Databases
-  - [Gen AI Databases Retrieval App](https://github.com/GoogleCloudPlatform/genai-databases-retrieval-app)
-- Other
-  - [ai-on-gke](https://github.com/GoogleCloudPlatform/ai-on-gke)
-  - [ai-infra-cluster-provisioning](https://github.com/GoogleCloudPlatform/ai-infra-cluster-provisioning)
-  - [solutions-genai-llm-workshop](https://github.com/GoogleCloudPlatform/solutions-genai-llm-workshop)
-  - [terraform-genai-doc-summarization](https://github.com/GoogleCloudPlatform/terraform-genai-doc-summarization)
-  - [terraform-genai-knowledge-base](https://github.com/GoogleCloudPlatform/terraform-genai-knowledge-base)
-  - [genai-product-catalog](https://github.com/GoogleCloudPlatform/genai-product-catalog)
-  - [solutionbuilder-terraform-genai-doc-summarization](https://github.com/GoogleCloudPlatform/solutionbuilder-terraform-genai-doc-summarization)
-  - [solutions-viai-edge-provisioning-configuration](https://github.com/GoogleCloudPlatform/solutions-viai-edge-provisioning-configuration)
-  - [mis-ai-accelerator](https://github.com/GoogleCloudPlatform/mis-ai-accelerator)
-  - [dataflow-opinion-analysis](https://github.com/GoogleCloudPlatform/dataflow-opinion-analysis)
-  - [genai-beyond-basics](https://github.com/meteatamel/genai-beyond-basics)
-  - [Gemini by Example](https://geminibyexample.com)
+The gap: No system actively consolidates information like a human brain does. Humans don't just store memories. During sleep, the brain replays, connects, and compresses information. This agent does the same thing.
 
-## Contributing
+## Architecture
 
-Contributions welcome! See the [Contributing Guide](https://github.com/GoogleCloudPlatform/generative-ai/blob/main/CONTRIBUTING.md).
+![Architecture Diagram](docs/architecture.png)
 
-## Getting help
+Each agent has its own tools for reading/writing the memory store. The orchestrator routes incoming requests to the right specialist.
 
-Please use the [issues page](https://github.com/GoogleCloudPlatform/generative-ai/issues) to provide suggestions, feedback or submit a bug report.
+## How It Works
 
-## Disclaimer
+### 1. Ingest
 
-This repository itself is not an officially supported Google product. The code in this repository is for demonstrative purposes only.
+Feed the agent **any file** — text, images, audio, video, or PDFs. The **IngestAgent** uses Gemini's multimodal capabilities to extract structured information from all of them:
+
+```
+Input: "Anthropic reports 62% of Claude usage is code-related.
+        AI agents are the fastest growing category."
+           │
+           ▼
+   ┌─────────────────────────────────────────────┐
+   │ Summary:  Anthropic reports 62% of Claude   │
+   │           usage is code-related...          │
+   │ Entities: [Anthropic, Claude, AI agents]    │
+   │ Topics:   [AI, code generation, agents]     │
+   │ Importance: 0.8                             │
+   └─────────────────────────────────────────────┘
+```
+
+**Supported file types (27 total):**
+
+| Category | Extensions |
+|---|---|
+| Text | `.txt`, `.md`, `.json`, `.csv`, `.log`, `.xml`, `.yaml`, `.yml` |
+| Images | `.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`, `.bmp`, `.svg` |
+| Audio | `.mp3`, `.wav`, `.ogg`, `.flac`, `.m4a`, `.aac` |
+| Video | `.mp4`, `.webm`, `.mov`, `.avi`, `.mkv` |
+| Documents | `.pdf` |
+
+**Three ways to ingest:**
+- **File watcher**: Drop any supported file in the `./inbox` folder. The agent picks it up automatically.
+- **Dashboard upload**: Use the 📎 Upload button in the Streamlit dashboard.
+- **HTTP API**: `POST /ingest` with text content.
+
+### 2. Consolidate
+
+The **ConsolidateAgent** runs on a timer (default: every 30 minutes). Like the human brain during sleep, it:
+
+- Reviews unconsolidated memories
+- Finds connections between them
+- Generates cross-cutting insights
+- Compresses related information
+
+```
+Memory #1: "AI agents are growing fast but reliability is a challenge"
+Memory #2: "Q1 priority: reduce inference costs by 40%"
+Memory #3: "Current LLM memory approaches all have gaps"
+Memory #4: "Smart inbox idea: persistent AI memory for email"
+                   │
+                   ▼  ConsolidateAgent
+   ┌─────────────────────────────────────────────┐
+   │ Connections:                                │
+   │   #1 ↔ #3: Agent reliability needs better   │
+   │            memory architectures             │
+   │   #2 ↔ #1: Cost reduction enables scaling   │
+   │            agent deployment                 │
+   │   #3 ↔ #4: Smart inbox is an application    │
+   │            of reconstructive memory         │
+   │                                             │
+   │ Insight: "The bottleneck for next-gen AI    │
+   │  tools is the transition from static RAG    │
+   │  to dynamic memory systems"                 │
+   └─────────────────────────────────────────────┘
+```
+
+### 3. Query
+
+Ask any question. The **QueryAgent** reads all memories and consolidation insights, then synthesizes an answer with source citations:
+
+```
+Q: "What should I focus on?"
+
+A: "Based on your memories, prioritize:
+   1. Ship the API by March 15 [Memory 2]
+   2. The agent reliability gap [Memory 1] could be addressed
+      by the reconstructive memory approach [Memory 3]
+   3. The smart inbox concept [Memory 4] validates the
+      market need for persistent AI memory"
+```
+
+## Quick Start
+
+### 1. Install
+
+```bash
+git clone https://github.com/Shubhamsaboo/always-on-memory-agent.git
+cd always-on-memory-agent
+pip install -r requirements.txt
+```
+
+### 2. Set your API key
+
+```bash
+export GOOGLE_API_KEY="your-gemini-api-key"
+```
+
+Get your API key from [Vertex AI Studio](https://vertexai.google.com/) or [Google AI Studio](https://aistudio.google.com/).
+
+### 3. Start the agent
+
+```bash
+python agent.py
+```
+
+That's it. The agent is now running:
+- Watching `./inbox/` for new files (text, images, audio, video, PDFs)
+- Consolidating every 30 minutes
+- Serving queries at `http://localhost:8888`
+
+### 4. Feed it information
+
+**Option A: Drop any file**
+```bash
+echo "Some important information" > inbox/notes.txt
+cp photo.jpg inbox/
+cp meeting.mp3 inbox/
+cp report.pdf inbox/
+# Agent auto-ingests within 5-10 seconds
+```
+
+**Option B: HTTP API**
+```bash
+curl -X POST http://localhost:8888/ingest \
+  -H "Content-Type: application/json" \
+  -d '{"text": "AI agents are the future", "source": "article"}'
+```
+
+### 5. Query
+
+```bash
+curl "http://localhost:8888/query?q=what+do+you+know"
+```
+
+### 6. Dashboard (optional)
+
+```bash
+streamlit run dashboard.py
+# Opens at http://localhost:8501
+```
+
+The Streamlit dashboard connects to the running agent and provides a visual interface for:
+- **Ingesting** text and uploading files (images, audio, video, PDFs)
+- **Querying** memory with natural language
+- **Browsing** and **deleting** stored memories
+- **Consolidating** memories on demand
+
+## API Reference
+
+| Endpoint | Method | Description |
+|---|---|---|
+| `/status` | GET | Memory statistics (counts) |
+| `/memories` | GET | List all stored memories |
+| `/ingest` | POST | Ingest new text (`{"text": "...", "source": "..."}`) |
+| `/query?q=...` | GET | Query memory with a question |
+| `/consolidate` | POST | Trigger manual consolidation |
+| `/delete` | POST | Delete a memory (`{"memory_id": 1}`) |
+| `/clear` | POST | Delete all memories (full reset) |
+
+## CLI Options
+
+```bash
+python agent.py [options]
+
+  --watch DIR              Folder to watch (default: ./inbox)
+  --port PORT              HTTP API port (default: 8888)
+  --consolidate-every MIN  Consolidation interval (default: 30)
+```
+
+## Project Structure
+
+```
+always-on-memory-agent/
+├── agent.py          # Always-on ADK agent (the real thing)
+├── dashboard.py      # Streamlit UI (connects to agent API)
+├── requirements.txt  # Dependencies
+├── inbox/            # Drop any file here for auto-ingestion
+├── docs/             # Logo assets (Gemini, ADK)
+└── memory.db         # SQLite database (created automatically)
+```
+
+## Why Gemini 3.1 Flash-Lite?
+
+This agent runs continuously. Cost and speed matter more than raw intelligence for background processing:
+
+- **Fast**: Low-latency ingestion and retrieval, designed for continuous background operation
+- **Cheap**: Negligible cost per session, making 24/7 operation practical
+- **Smart enough**: Extracts structure, finds connections, synthesizes answers
+
+## Built With
+
+- [Google ADK](https://google.github.io/adk-docs/) (Agent Development Kit) for agent orchestration
+- [Gemini 3.1 Flash-Lite](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/models/gemini/3-1-flash-lite) for all LLM operations
+- SQLite for persistent memory storage
+- aiohttp for the HTTP API
+- Streamlit for the dashboard
+
+## License
+
+MIT

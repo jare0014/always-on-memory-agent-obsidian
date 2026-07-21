@@ -35,7 +35,13 @@ from google.genai import types
 
 # ─── Config ────────────────────────────────────────────────────
 
-MODEL = os.getenv("MODEL", "gemini-3.1-flash-lite")
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
+MODEL = os.getenv("MODEL", "gemini-3.5-flash")
 DB_PATH = os.getenv("MEMORY_DB", "memory.db")
 
 # Supported file types for multimodal ingestion
