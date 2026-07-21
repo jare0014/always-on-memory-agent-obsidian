@@ -139,6 +139,13 @@ def store_memory(
         dict with memory_id and confirmation.
     """
     db = get_db()
+    existing = db.execute("SELECT id FROM memories WHERE summary = ? OR raw_text = ?", (summary, raw_text)).fetchone()
+    if existing:
+        mid = existing["id"]
+        db.close()
+        log.info(f"📥 Memory #{mid} already stored (duplicate skipped): {summary[:60]}...")
+        return {"memory_id": mid, "status": "already_stored", "summary": summary}
+
     now = datetime.now(timezone.utc).isoformat()
     cursor = db.execute(
         """INSERT INTO memories (source, raw_text, summary, entities, topics, importance, created_at)
@@ -211,6 +218,12 @@ def store_consolidation(
         dict with confirmation.
     """
     db = get_db()
+    existing = db.execute("SELECT id FROM consolidations WHERE source_ids = ?", (json.dumps(source_ids),)).fetchone()
+    if existing:
+        db.close()
+        log.info(f"🔄 Consolidation already exists for source_ids {source_ids}, skipping duplicate.")
+        return {"status": "already_consolidated", "memories_processed": len(source_ids), "insight": insight}
+
     now = datetime.now(timezone.utc).isoformat()
     db.execute(
         "INSERT INTO consolidations (source_ids, summary, insight, created_at) VALUES (?, ?, ?, ?)",
