@@ -13,9 +13,10 @@ from dotenv import load_dotenv
 load_dotenv()
 
 VAULT_PATH = os.getenv("OBSIDIAN_VAULT", r"C:\Users\jare0\Documents\Obsidian")
-AGENT_URL = "http://localhost:8888"
+AGENT_URL = "http://127.0.0.1:8888"
 DB_PATH = os.getenv("MEMORY_DB", "memory.db")
-COOLDOWN_SECONDS = 3.0  # Time to sleep between notes to let Ollama cool down
+# Use 0.2s delay for fast hosted Gemini API, or increase to 3.0s for local Ollama cooldown
+COOLDOWN_SECONDS = 0.2
 CONSOLIDATE_EVERY = 10  # Run consolidation every 10 new notes
 
 def get_db():
