@@ -18,8 +18,9 @@ from typing import List, Dict
 # Default fallback watchlist for liquid high-beta anchors
 DEFAULT_ANCHORS = ["CIFR", "COIN", "AMD", "NVDA", "TSLA", "PLTR", "MARA", "CLSK", "MSTR", "SOXL"]
 
-# Scan ID for Full Market Breakout Setup
-BREAKOUT_SCAN_ID = "9a7fdb86-4e1d-49a2-a7b2-dc278322d180"
+# Scan IDs for Full Market Scanning
+BREAKOUT_SCAN_ID = "9a7fdb86-4e1d-49a2-a7b2-dc278322d180"       # Strict 50D High Breakouts
+TECH_MOMENTUM_SCAN_ID = "1c0402cf-0ef7-4cb4-9bdd-c2ad239c7521"  # Intraday Tech & Growth Movers (NBIS, SMCI, DELL, CRWV)
 
 def calculate_momentum_score(quote: Dict) -> float:
     """
