@@ -77,6 +77,7 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(message)s",
     datefmt="[%H:%M]",
+    stream=sys.stdout,
 )
 log = logging.getLogger("memory-agent")
 
