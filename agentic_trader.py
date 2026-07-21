@@ -72,10 +72,12 @@ def rank_candidates(quotes: List[Dict]) -> List[Dict]:
     return ranked
 
 import market_datalake
+import sync_to_quant
 
 def process_scan_and_log(quotes: List[Dict[str, Any]], scan_results: List[Dict[str, Any]] = None, portfolio_data: Dict[str, Any] = None, account_num: str = "796066298"):
     """
     Ranks market candidates and logs all quote, scanner, and portfolio data into market_datalake.db.
+    Mandates full 8,000+ universe scan data logging and syncs to Quant project data lake.
     """
     market_datalake.init_db()
     
@@ -86,6 +88,12 @@ def process_scan_and_log(quotes: List[Dict[str, Any]], scan_results: List[Dict[s
     if portfolio_data:
         market_datalake.log_portfolio_snapshot(account_num, portfolio_data)
         
+    # Auto-sync to Quant project data lake
+    try:
+        sync_to_quant.sync_datalakes()
+    except Exception as e:
+        print(f"Sync error: {e}")
+
     return rank_candidates(quotes)
 
 if __name__ == "__main__":
@@ -93,4 +101,4 @@ if __name__ == "__main__":
     print("🌐 Full-Universe Robinhood Agentic Trader initialized.")
     print("📈 Target Account: Agentic (796066298)")
     print(f"📦 Intraday Data Lake: market_datalake.db")
-    print(f"🔍 Active Market Scanner ID: {BREAKOUT_SCAN_ID} (Evaluating 8,000+ US stocks & ETFs)")
+    print(f"🔍 Active Full-Market Scanner ID: {BREAKOUT_SCAN_ID} (Mandatory 8,000+ US stock & ETF scan)")
