@@ -409,7 +409,7 @@ def build_agents():
         tools=[get_memory_stats],
     )
 
-    return orchestrator
+    return ingest_agent, consolidate_agent, query_agent, orchestrator
 
 
 # ─── Agent Runner ──────────────────────────────────────────────
@@ -417,22 +417,33 @@ def build_agents():
 
 class MemoryAgent:
     def __init__(self):
-        self.agent = build_agents()
+        ingest_agent, consolidate_agent, query_agent, orchestrator = build_agents()
         self.session_service = InMemorySessionService()
-        self.runner = Runner(
-            agent=self.agent,
-            app_name="memory_layer",
+        
+        self.ingest_runner = Runner(
+            agent=ingest_agent,
+            app_name="ingest_layer",
+            session_service=self.session_service,
+        )
+        self.consolidate_runner = Runner(
+            agent=consolidate_agent,
+            app_name="consolidate_layer",
+            session_service=self.session_service,
+        )
+        self.query_runner = Runner(
+            agent=query_agent,
+            app_name="query_layer",
             session_service=self.session_service,
         )
 
-    async def run(self, message: str) -> str:
+    async def run(self, message: str, runner: Runner) -> str:
         session = await self.session_service.create_session(
             app_name="memory_layer", user_id="agent",
         )
         content = types.Content(role="user", parts=[types.Part.from_text(text=message)])
-        return await self._execute(session, content)
+        return await self._execute(session, content, runner)
 
-    async def run_multimodal(self, text: str, file_bytes: bytes, mime_type: str) -> str:
+    async def run_multimodal(self, text: str, file_bytes: bytes, mime_type: str, runner: Runner) -> str:
         """Send a multimodal message with both text and a media file."""
         session = await self.session_service.create_session(
             app_name="memory_layer", user_id="agent",
@@ -442,12 +453,12 @@ class MemoryAgent:
             types.Part.from_bytes(data=file_bytes, mime_type=mime_type),
         ]
         content = types.Content(role="user", parts=parts)
-        return await self._execute(session, content)
+        return await self._execute(session, content, runner)
 
-    async def _execute(self, session, content: types.Content) -> str:
+    async def _execute(self, session, content: types.Content, runner: Runner) -> str:
         """Run the agent with the given content and return the text response."""
         response = ""
-        async for event in self.runner.run_async(
+        async for event in runner.run_async(
             user_id="agent", session_id=session.id, new_message=content,
         ):
             if event.content and event.content.parts:
@@ -458,7 +469,7 @@ class MemoryAgent:
 
     async def ingest(self, text: str, source: str = "") -> str:
         msg = f"Remember this information (source: {source}):\n\n{text}" if source else f"Remember this information:\n\n{text}"
-        return await self.run(msg)
+        return await self.run(msg, self.ingest_runner)
 
     async def ingest_file(self, file_path: Path) -> str:
         """Ingest a media file (image, audio, video, PDF) via multimodal."""
@@ -483,16 +494,17 @@ class MemoryAgent:
             f"extract all meaningful information for memory storage."
         )
         log.info(f"🔮 Ingesting {mime_type.split('/')[0]}: {file_path.name} ({size_mb:.1f}MB)")
-        return await self.run_multimodal(prompt, file_bytes, mime_type)
+        return await self.run_multimodal(prompt, file_bytes, mime_type, self.ingest_runner)
 
     async def consolidate(self) -> str:
-        return await self.run("Consolidate unconsolidated memories. Find connections and patterns.")
+        return await self.run("Consolidate unconsolidated memories. Find connections and patterns.", self.consolidate_runner)
 
     async def query(self, question: str) -> str:
-        return await self.run(f"Based on my memories, answer: {question}")
+        return await self.run(f"Based on my memories, answer: {question}", self.query_runner)
 
     async def status(self) -> str:
-        return await self.run("Give me a status report on my memory system.")
+        stats = get_memory_stats()
+        return f"Memory Stats:\nTotal Memories: {stats.get('total_memories')}\nPending Consolidation: {stats.get('unconsolidated')}\nConsolidations: {stats.get('consolidations')}"
 
 
 # ─── File Watcher ──────────────────────────────────────────────
