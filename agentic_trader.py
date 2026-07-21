@@ -71,7 +71,26 @@ def rank_candidates(quotes: List[Dict]) -> List[Dict]:
     ranked.sort(key=lambda x: x["score"], reverse=True)
     return ranked
 
+import market_datalake
+
+def process_scan_and_log(quotes: List[Dict[str, Any]], scan_results: List[Dict[str, Any]] = None, portfolio_data: Dict[str, Any] = None, account_num: str = "796066298"):
+    """
+    Ranks market candidates and logs all quote, scanner, and portfolio data into market_datalake.db.
+    """
+    market_datalake.init_db()
+    
+    if quotes:
+        market_datalake.log_intraday_quotes(quotes)
+    if scan_results:
+        market_datalake.log_scanner_results(scan_results, scan_id=BREAKOUT_SCAN_ID)
+    if portfolio_data:
+        market_datalake.log_portfolio_snapshot(account_num, portfolio_data)
+        
+    return rank_candidates(quotes)
+
 if __name__ == "__main__":
+    market_datalake.init_db()
     print("🌐 Full-Universe Robinhood Agentic Trader initialized.")
     print("📈 Target Account: Agentic (796066298)")
+    print(f"📦 Intraday Data Lake: market_datalake.db")
     print(f"🔍 Active Market Scanner ID: {BREAKOUT_SCAN_ID} (Evaluating 8,000+ US stocks & ETFs)")
