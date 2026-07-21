@@ -469,6 +469,10 @@ class MemoryAgent:
         return response
 
     async def ingest(self, text: str, source: str = "") -> str:
+        MAX_INGEST_CHARS = 40000
+        if len(text) > MAX_INGEST_CHARS:
+            log.info(f"✂️ Truncating note text for '{source}' from {len(text)} to {MAX_INGEST_CHARS} characters for indexing.")
+            text = text[:MAX_INGEST_CHARS] + "\n\n[Content truncated for indexing size limits...]"
         msg = f"Remember this information (source: {source}):\n\n{text}" if source else f"Remember this information:\n\n{text}"
         return await self.run(msg, self.ingest_runner)
 
@@ -586,8 +590,12 @@ def build_http(agent: MemoryAgent, watch_path: str = "./inbox"):
         q = request.query.get("q", "").strip()
         if not q:
             return web.json_response({"error": "missing ?q= parameter"}, status=400)
-        answer = await agent.query(q)
-        return web.json_response({"question": q, "answer": answer})
+        try:
+            answer = await agent.query(q)
+            return web.json_response({"question": q, "answer": answer})
+        except Exception as e:
+            log.error(f"Error handling query: {e}")
+            return web.json_response({"error": str(e)}, status=500)
 
     async def handle_ingest(request: web.Request):
         try:
@@ -598,12 +606,20 @@ def build_http(agent: MemoryAgent, watch_path: str = "./inbox"):
         if not text:
             return web.json_response({"error": "missing 'text' field"}, status=400)
         source = data.get("source", "api")
-        result = await agent.ingest(text, source=source)
-        return web.json_response({"status": "ingested", "response": result})
+        try:
+            result = await agent.ingest(text, source=source)
+            return web.json_response({"status": "ingested", "response": result})
+        except Exception as e:
+            log.error(f"Error handling ingest: {e}")
+            return web.json_response({"error": str(e)}, status=500)
 
     async def handle_consolidate(request: web.Request):
-        result = await agent.consolidate()
-        return web.json_response({"status": "done", "response": result})
+        try:
+            result = await agent.consolidate()
+            return web.json_response({"status": "done", "response": result})
+        except Exception as e:
+            log.error(f"Error handling consolidate: {e}")
+            return web.json_response({"error": str(e)}, status=500)
 
     async def handle_status(request: web.Request):
         stats = get_memory_stats()
