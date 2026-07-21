@@ -15,9 +15,14 @@ Models real-world constraints:
 """
 
 import os
+import sys
 import sqlite3
 import pandas as pd
+import json
 from typing import List, Dict, Any
+
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "market_datalake.db")
 
