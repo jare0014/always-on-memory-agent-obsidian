@@ -5,9 +5,9 @@ const fs = require('fs');
 
 const DEFAULT_SETTINGS = {
     autoStartOnLaunch: false,
-    llmProvider: 'ollama', // 'gemini' or 'ollama'
+    llmProvider: 'gemini', // 'gemini' or 'ollama'
     geminiModel: 'gemini-3.1-flash-lite',
-    ollamaModel: 'gemma3:4b',
+    ollamaModel: 'qwen2.5:7b',
     ollamaUrl: 'http://100.93.91.76:11434',
     geminiApiKey: ''
 };
