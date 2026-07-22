@@ -652,12 +652,63 @@ class MemoryAgentView extends obsidian.ItemView {
             if (e.key === 'Enter') executeQuery();
         };
 
+        // Section: Recent Memories & Consolidated Insights Cards
+        const recentSection = container.createDiv({ style: 'margin-top:15px; border:1px solid var(--background-modifier-border); border-radius:8px; padding:12px; background:var(--background-primary);' });
+        const recentHeader = recentSection.createDiv({ style: 'display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;' });
+        recentHeader.createEl('h4', { text: '🧠 Recent Memories & Insights', style: 'margin:0;' });
+        const refreshMemoriesBtn = recentHeader.createEl('button', { text: '↻ Refresh', style: 'font-size:0.8em; padding:2px 8px;' });
+
+        const cardsContainer = recentSection.createDiv({ style: 'display:flex; flex-direction:column; gap:8px;' });
+
+        const loadRecentMemories = async () => {
+            cardsContainer.empty();
+            const loadingMsg = cardsContainer.createDiv({ text: 'Loading recent memories...', style: 'font-size:0.85em; color:var(--text-muted);' });
+            try {
+                const res = await obsidian.requestUrl({ url: 'http://localhost:8888/memories', method: 'GET' });
+                if (res.status === 200) {
+                    loadingMsg.remove();
+                    const data = JSON.parse(res.text);
+                    const memories = data.memories || [];
+                    if (memories.length === 0) {
+                        cardsContainer.createDiv({ text: 'No memories stored in database yet.', style: 'font-size:0.85em; color:var(--text-muted);' });
+                        return;
+                    }
+                    memories.slice(0, 6).forEach(m => {
+                        const card = cardsContainer.createDiv({ style: 'border-left:3px solid var(--interactive-accent); padding:8px 10px; background:var(--background-secondary); border-radius:0 6px 6px 0; font-size:0.85em;' });
+                        
+                        const cardMeta = card.createDiv({ style: 'display:flex; justify-content:space-between; font-size:0.8em; color:var(--text-muted); margin-bottom:4px;' });
+                        cardMeta.createSpan({ text: `Memory #${m.id}` });
+                        cardMeta.createSpan({ text: `${m.source || 'Vault'} • ${(m.created_at || '').substring(0, 10)}` });
+
+                        card.createEl('p', { text: m.summary || m.raw_text || 'No summary available.', style: 'margin:0 0 6px 0; line-height:1.4; color:var(--text-normal);' });
+
+                        if (m.topics && Array.isArray(m.topics) && m.topics.length > 0) {
+                            const tagsDiv = card.createDiv({ style: 'display:flex; flex-wrap:wrap; gap:4px;' });
+                            m.topics.forEach(tag => {
+                                tagsDiv.createSpan({ text: `#${tag}`, style: 'background:var(--background-modifier-border); padding:1px 5px; border-radius:3px; font-size:0.75em; color:var(--text-muted);' });
+                            });
+                        }
+                    });
+                } else {
+                    loadingMsg.setText('Unable to fetch memories (Service Offline)');
+                }
+            } catch (e) {
+                loadingMsg.setText('Memory service offline. Start backend to view cards.');
+            }
+        };
+
+        refreshMemoriesBtn.onclick = loadRecentMemories;
+        loadRecentMemories();
+
         // Section: Agent Controls
-        const actionsSection = container.createDiv({ style: 'display:flex; flex-direction:column; gap:8px;' });
+        const actionsSection = container.createDiv({ style: 'margin-top:15px; display:flex; flex-direction:column; gap:8px;' });
         const crawlBtn = actionsSection.createEl('button', { text: '🔄 Crawl & Index Vault Now' });
         crawlBtn.onclick = () => {
             this.plugin.runCrawl();
-            setTimeout(refreshStats, 3000);
+            setTimeout(() => {
+                refreshStats();
+                loadRecentMemories();
+            }, 3500);
         };
 
         const consolidateBtn = actionsSection.createEl('button', { text: '🧩 Consolidate Memories Now' });
@@ -671,6 +722,7 @@ class MemoryAgentView extends obsidian.ItemView {
             } finally {
                 consolidateBtn.setText('🧩 Consolidate Memories Now');
                 refreshStats();
+                loadRecentMemories();
             }
         };
     }
