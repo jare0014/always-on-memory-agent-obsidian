@@ -8,7 +8,7 @@ const DEFAULT_SETTINGS = {
     llmProvider: 'ollama', // 'gemini' or 'ollama'
     geminiModel: 'gemini-3.1-flash-lite',
     ollamaModel: 'gemma3:4b',
-    ollamaUrl: 'http://localhost:11434',
+    ollamaUrl: 'http://100.93.91.76:11434',
     geminiApiKey: ''
 };
 
