@@ -198,7 +198,7 @@ class AlwaysOnMemoryAgentPlugin extends obsidian.Plugin {
         this.statusBarItem.setText(`${icon} Memory Agent: ${statusText}`);
     }
 
-    startAgent() {
+    async startAgent() {
         if (this.agentProcess) {
             new obsidian.Notice('Always-On Memory Agent is already running.');
             return;
@@ -208,6 +208,19 @@ class AlwaysOnMemoryAgentPlugin extends obsidian.Plugin {
         const scriptPath = this.getScriptPath('agent.py');
         const projectDir = path.dirname(scriptPath);
 
+        // Retrieve API key securely from Obsidian SecretStorage / System Keychain
+        let geminiApiKey = '';
+        if (this.app.secretStorage) {
+            try {
+                geminiApiKey = await this.app.secretStorage.getSecret('schedule-assistant-gemini-api-key') || 
+                               await this.app.secretStorage.getSecret('timeblocker-gemini-api-key') || 
+                               await this.app.secretStorage.getSecret('always-on-memory-gemini-api-key') || '';
+            } catch(e) {}
+        }
+        if (!geminiApiKey) {
+            geminiApiKey = this.settings.geminiApiKey || '';
+        }
+
         new obsidian.Notice('Starting Always-On Memory Agent...');
         this.updateStatus('Starting...', true);
 
@@ -215,7 +228,15 @@ class AlwaysOnMemoryAgentPlugin extends obsidian.Plugin {
             this.agentProcess = child_process.spawn(pythonCmd, [scriptPath], {
                 cwd: projectDir,
                 detached: false,
-                env: { ...process.env, PYTHONIOENCODING: 'utf-8' }
+                env: { 
+                    ...process.env, 
+                    PYTHONIOENCODING: 'utf-8',
+                    GEMINI_API_KEY: geminiApiKey,
+                    MODEL: this.settings.llmProvider === 'ollama' 
+                        ? `litellm:ollama/${this.settings.ollamaModel || 'gemma3:4b'}` 
+                        : (this.settings.geminiModel || 'gemini-3.5-flash-lite'),
+                    OLLAMA_API_BASE: this.settings.ollamaUrl || 'http://100.93.91.76:11434'
+                }
             });
 
             this.agentProcess.stdout.on('data', (data) => {
@@ -431,7 +452,9 @@ class AlwaysOnMemoryAgentSettingTab extends obsidian.PluginSettingTab {
                 .setName('Gemini Model')
                 .setDesc('Select Gemini model variant.')
                 .addDropdown(dropdown => dropdown
-                    .addOption('gemini-3.1-flash-lite', 'Gemini 3.1 Flash-Lite (Fast & Cost-Effective)')
+                    .addOption('gemini-3.5-flash-lite', 'Gemini 3.5 Flash-Lite (Fast & Ultra-Light)')
+                    .addOption('gemini-3.5-flash', 'Gemini 3.5 Flash')
+                    .addOption('gemini-3.1-flash-lite', 'Gemini 3.1 Flash-Lite')
                     .addOption('gemini-2.5-flash', 'Gemini 2.5 Flash')
                     .addOption('gemini-2.5-pro', 'Gemini 2.5 Pro')
                     .setValue(this.plugin.settings.geminiModel)
