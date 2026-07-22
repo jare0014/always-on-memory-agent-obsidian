@@ -18,9 +18,12 @@ class AlwaysOnMemoryAgentPlugin extends obsidian.Plugin {
         this.statusBarItem = this.addStatusBarItem();
         this.updateStatus('Stopped');
 
+        // Add Settings Tab (Renders in Settings Sidebar)
+        this.addSettingTab(new AlwaysOnMemoryAgentSettingTab(this.app, this));
+
         // Add Ribbon Icon
-        this.addRibbonIcon('brain', 'Always-On Memory Agent', () => {
-            this.showMenu();
+        this.addRibbonIcon('brain', 'Always-On Memory Agent', (evt) => {
+            this.showMenu(evt);
         });
 
         // Command Palette Commands
@@ -179,7 +182,7 @@ class AlwaysOnMemoryAgentPlugin extends obsidian.Plugin {
         });
     }
 
-    showMenu() {
+    showMenu(evt) {
         const menu = new obsidian.Menu();
         if (this.agentProcess) {
             menu.addItem((item) => item.setTitle('Stop Memory Agent').setIcon('cross').onClick(() => this.stopAgent()));
@@ -188,7 +191,7 @@ class AlwaysOnMemoryAgentPlugin extends obsidian.Plugin {
         }
         menu.addItem((item) => item.setTitle('Crawl & Index Vault').setIcon('refresh-cw').onClick(() => this.runCrawl()));
         menu.addItem((item) => item.setTitle('Launch Dashboard').setIcon('layout-dashboard').onClick(() => this.launchDashboard()));
-        menu.showAtPosition({ x: event?.clientX || 100, y: event?.clientY || 100 });
+        menu.showAtPosition({ x: evt?.clientX || 100, y: evt?.clientY || 100 });
     }
 
     async loadSettings() {
@@ -197,6 +200,63 @@ class AlwaysOnMemoryAgentPlugin extends obsidian.Plugin {
 
     async saveSettings() {
         await this.saveData(this.settings);
+    }
+}
+
+class AlwaysOnMemoryAgentSettingTab extends obsidian.PluginSettingTab {
+    constructor(app, plugin) {
+        super(app, plugin);
+        this.plugin = plugin;
+    }
+
+    display() {
+        const { containerEl } = this;
+        containerEl.empty();
+        containerEl.createEl('h2', { text: 'Always-On Memory Agent Settings' });
+
+        new obsidian.Setting(containerEl)
+            .setName('Auto-Start on Launch')
+            .setDesc('Automatically start the memory agent background process when Obsidian launches.')
+            .addToggle(toggle => toggle
+                .setValue(this.plugin.settings.autoStartOnLaunch)
+                .onChange(async (value) => {
+                    this.plugin.settings.autoStartOnLaunch = value;
+                    await this.plugin.saveSettings();
+                }));
+
+        new obsidian.Setting(containerEl)
+            .setName('Crawl & Index Vault')
+            .setDesc('Trigger an immediate re-index of vault notes into memory.db.')
+            .addButton(btn => btn
+                .setButtonText('Run Indexer Now')
+                .setCta()
+                .onClick(() => {
+                    this.plugin.runCrawl();
+                }));
+
+        new obsidian.Setting(containerEl)
+            .setName('Memory Dashboard')
+            .setDesc('Generate or refresh the visual Memory Agent dashboard note.')
+            .addButton(btn => btn
+                .setButtonText('Launch Dashboard')
+                .onClick(() => {
+                    this.plugin.launchDashboard();
+                }));
+
+        new obsidian.Setting(containerEl)
+            .setName('Agent Service Control')
+            .setDesc('Start or stop the Python memory agent background service.')
+            .addButton(btn => btn
+                .setButtonText(this.plugin.agentProcess ? 'Stop Agent' : 'Start Agent')
+                .setWarning(!!this.plugin.agentProcess)
+                .onClick(() => {
+                    if (this.plugin.agentProcess) {
+                        this.plugin.stopAgent();
+                    } else {
+                        this.plugin.startAgent();
+                    }
+                    this.display();
+                }));
     }
 }
 
