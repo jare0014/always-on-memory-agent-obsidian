@@ -2,7 +2,10 @@
 
 An always-on personal memory and intelligence layer that runs continuously in the background, observing your Obsidian notes, extracting semantic insights, ingesting multimodal assets (PDFs, Images, Audio), and maintaining a persistent, structured SQLite memory bank of knowledge.
 
-> **Attribution & Credits**: This project is a custom Obsidian Desktop plugin implementation adapted from the **Google ADK (Agent Development Kit)** memory architecture samples published in the [Google Cloud Generative AI Repository](https://github.com/GoogleCloudPlatform/generative-ai).
+> **Attribution & Open-Source Acknowledgments**: 
+> This project is an independent custom implementation built by **Alex Jarecki** to bring persistent multi-agent memory to Obsidian Desktop. 
+> The core memory architecture concepts and agent coordination patterns are adapted from open-source sample code in the [Google Cloud Generative AI Repository](https://github.com/GoogleCloudPlatform/generative-ai) (Apache 2.0 License). 
+> All Obsidian TypeScript/JS plugin components, SecretStorage OS keychain integrations, zero-flicker native `ItemView` interfaces, background folder watching, and vault indexing pipelines were developed independently for this desktop integration.
 
 ---
 
