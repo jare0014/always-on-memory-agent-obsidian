@@ -584,6 +584,35 @@ class MemoryAgentView extends obsidian.ItemView {
         container.style.padding = '15px';
         container.style.overflowY = 'auto';
 
+        // Inject Card CSS Styles
+        const styleEl = container.createEl('style');
+        styleEl.innerHTML = `
+            .always-on-memory-card {
+                border: 1px solid var(--background-modifier-border, rgba(255, 255, 255, 0.15)) !important;
+                border-left: 4px solid var(--interactive-accent, #7b61ff) !important;
+                padding: 12px 14px !important;
+                background: var(--background-secondary-alt, var(--background-secondary, rgba(255, 255, 255, 0.04))) !important;
+                border-radius: 8px !important;
+                box-shadow: 0 3px 10px rgba(0, 0, 0, 0.25) !important;
+                margin-bottom: 12px !important;
+                transition: transform 0.15s ease, box-shadow 0.15s ease;
+            }
+            .always-on-memory-card:hover {
+                box-shadow: 0 5px 14px rgba(0, 0, 0, 0.35) !important;
+                border-color: var(--interactive-accent, #7b61ff) !important;
+            }
+            .always-on-memory-tag {
+                background: rgba(123, 97, 255, 0.18) !important;
+                color: var(--text-accent, #aa99ff) !important;
+                border: 1px solid rgba(123, 97, 255, 0.35) !important;
+                padding: 2px 8px !important;
+                border-radius: 12px !important;
+                font-size: 0.75em !important;
+                font-weight: 500 !important;
+                display: inline-block !important;
+            }
+        `;
+
         // Header
         const header = container.createDiv({ style: 'margin-bottom:15px; border-bottom:1px solid var(--background-modifier-border); padding-bottom:10px;' });
         header.createEl('h3', { text: '🧠 Memory Agent Side Panel', style: 'margin:0 0 5px 0;' });
@@ -674,9 +703,7 @@ class MemoryAgentView extends obsidian.ItemView {
                         return;
                     }
                     memories.slice(0, 6).forEach(m => {
-                        const card = cardsContainer.createDiv({ 
-                            style: 'border:1px solid var(--background-modifier-border, #3a3a3c) !important; border-left:4px solid var(--interactive-accent, #7b61ff) !important; padding:12px 14px !important; background:var(--background-primary-alt, var(--background-secondary, #1e1e1e)) !important; border-radius:8px !important; font-size:0.85em; box-shadow:0 2px 8px rgba(0,0,0,0.2) !important; margin-bottom:10px !important;' 
-                        });
+                        const card = cardsContainer.createDiv({ cls: 'always-on-memory-card' });
                         
                         const cardMeta = card.createDiv({ style: 'display:flex; justify-content:space-between; align-items:center; font-size:0.8em; color:var(--text-muted, #8e8e93); margin-bottom:6px; font-weight:600;' });
                         cardMeta.createSpan({ text: `Memory #${m.id}`, style: 'color:var(--interactive-accent, #7b61ff); font-weight:bold;' });
@@ -689,7 +716,7 @@ class MemoryAgentView extends obsidian.ItemView {
                             m.topics.forEach(tag => {
                                 tagsDiv.createSpan({ 
                                     text: `#${tag}`, 
-                                    style: 'background:rgba(123, 97, 255, 0.15) !important; color:var(--text-accent, #a792ff) !important; border:1px solid rgba(123, 97, 255, 0.3) !important; padding:2px 8px; border-radius:12px; font-size:0.75em; font-weight:500;' 
+                                    cls: 'always-on-memory-tag'
                                 });
                             });
                         }
