@@ -462,11 +462,11 @@ class AlwaysOnMemoryAgentSettingTab extends obsidian.PluginSettingTab {
                 .setName('Ollama Local Model')
                 .setDesc('Select or enter local Ollama model identifier.')
                 .addDropdown(dropdown => dropdown
-                    .addOption('gemma3:4b', 'gemma3:4b (Current Active Local Model)')
+                    .addOption('qwen2.5:7b', 'qwen2.5:7b (Recommended Local Model)')
+                    .addOption('qwen2.5-coder:7b', 'qwen2.5-coder:7b')
+                    .addOption('gemma3:4b', 'gemma3:4b')
                     .addOption('llama3.2', 'llama3.2')
-                    .addOption('mistral', 'mistral')
-                    .addOption('qwen2.5', 'qwen2.5')
-                    .setValue(this.plugin.settings.ollamaModel)
+                    .setValue(this.plugin.settings.ollamaModel || 'qwen2.5:7b')
                     .onChange(async (value) => {
                         this.plugin.settings.ollamaModel = value;
                         await this.plugin.saveSettings();
