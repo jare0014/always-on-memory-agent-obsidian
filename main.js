@@ -51,9 +51,115 @@ class AlwaysOnMemoryAgentPlugin extends obsidian.Plugin {
             callback: () => this.launchDashboard()
         });
 
+        this.registerEvent(
+            this.app.workspace.on('layout-change', () => {
+                setTimeout(() => this.organizeCustomPluginsSidebar(), 200);
+            })
+        );
+
         if (this.settings.autoStartOnLaunch) {
             this.startAgent();
         }
+    }
+
+    organizeCustomPluginsSidebar() {
+        const settingModal = document.querySelector('.modal.mod-settings');
+        if (!settingModal) return;
+        
+        const sidebar = settingModal.querySelector('.vertical-tab-header');
+        if (!sidebar) return;
+        
+        const communitySection = sidebar.querySelector('.vertical-tab-header-group-items[data-section="community-plugins"]');
+        if (!communitySection) return;
+        
+        let folderContainer = communitySection.querySelector('.custom-plugins-folder-container');
+        
+        const targetPluginIds = [
+            'always-on-memory-agent',
+            'schedule-assistant-focus-timer',
+            'omni-logger',
+            'google-keep-sync',
+            'grind-manager',
+            'knowledge-pipeline',
+            'git-logger'
+        ];
+        
+        const targetElements = [];
+        const navItems = communitySection.querySelectorAll('.vertical-tab-nav-item');
+        navItems.forEach(item => {
+            const id = item.getAttribute('data-setting-id');
+            if (targetPluginIds.includes(id)) {
+                targetElements.push(item);
+            }
+        });
+        
+        if (targetElements.length === 0) return;
+        
+        if (!folderContainer) {
+            const folderHeader = document.createElement('div');
+            folderHeader.className = 'vertical-tab-nav-item custom-plugins-folder-header';
+            folderHeader.style.fontWeight = '600';
+            folderHeader.style.cursor = 'pointer';
+            folderHeader.style.display = 'flex';
+            folderHeader.style.alignItems = 'center';
+            folderHeader.style.justifyContent = 'space-between';
+            folderHeader.style.padding = '8px 12px';
+            folderHeader.style.marginTop = '8px';
+            folderHeader.style.borderTop = '1px solid var(--background-modifier-border)';
+            
+            const headerTitle = document.createElement('span');
+            headerTitle.textContent = '📁 Custom Plugins';
+            folderHeader.appendChild(headerTitle);
+            
+            const chevron = document.createElement('span');
+            chevron.textContent = '▼';
+            chevron.style.fontSize = '0.75rem';
+            chevron.style.transition = 'transform 0.2s ease';
+            folderHeader.appendChild(chevron);
+            
+            folderContainer = document.createElement('div');
+            folderContainer.className = 'custom-plugins-folder-container';
+            folderContainer.style.transition = 'max-height 0.25s ease-out, opacity 0.2s ease';
+            folderContainer.style.overflow = 'hidden';
+            
+            let isCollapsed = localStorage.getItem('custom-plugins-settings-collapsed') === 'true';
+            if (isCollapsed) {
+                folderContainer.style.maxHeight = '0px';
+                folderContainer.style.opacity = '0';
+                chevron.style.transform = 'rotate(-90deg)';
+            } else {
+                folderContainer.style.maxHeight = '500px';
+                folderContainer.style.opacity = '1';
+            }
+            
+            folderHeader.onclick = (e) => {
+                e.stopPropagation();
+                isCollapsed = !isCollapsed;
+                localStorage.setItem('custom-plugins-settings-collapsed', isCollapsed);
+                if (isCollapsed) {
+                    folderContainer.style.maxHeight = '0px';
+                    folderContainer.style.opacity = '0';
+                    chevron.style.transform = 'rotate(-90deg)';
+                } else {
+                    folderContainer.style.maxHeight = '500px';
+                    folderContainer.style.opacity = '1';
+                    chevron.style.transform = 'rotate(0deg)';
+                }
+            };
+            
+            const firstTarget = targetElements[0];
+            try {
+                communitySection.insertBefore(folderHeader, firstTarget);
+                communitySection.insertBefore(folderContainer, firstTarget);
+            } catch(e) {}
+        }
+        
+        targetElements.forEach(item => {
+            if (item.parentElement !== folderContainer) {
+                item.style.paddingLeft = '24px';
+                folderContainer.appendChild(item);
+            }
+        });
     }
 
     onunload() {
