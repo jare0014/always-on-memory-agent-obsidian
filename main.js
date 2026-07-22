@@ -5,8 +5,11 @@ const fs = require('fs');
 
 const DEFAULT_SETTINGS = {
     autoStartOnLaunch: false,
-    crawlIntervalMinutes: 60,
-    agentMode: 'autonomous'
+    llmProvider: 'ollama', // 'gemini' or 'ollama'
+    geminiModel: 'gemini-3.1-flash-lite',
+    ollamaModel: 'gemma3:4b',
+    ollamaUrl: 'http://localhost:11434',
+    geminiApiKey: ''
 };
 
 class AlwaysOnMemoryAgentPlugin extends obsidian.Plugin {
@@ -294,7 +297,6 @@ class AlwaysOnMemoryAgentPlugin extends obsidian.Plugin {
             tFile = await this.app.vault.create(dashboardNotePath, templateContent);
         }
 
-        // Open in Right Side Panel
         let leaf = this.app.workspace.getRightLeaf(false);
         if (!leaf) {
             leaf = this.app.workspace.getLeaf('split', 'vertical');
@@ -320,10 +322,39 @@ class AlwaysOnMemoryAgentPlugin extends obsidian.Plugin {
 
     async loadSettings() {
         this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+        this.syncEnvFile();
     }
 
     async saveSettings() {
         await this.saveData(this.settings);
+        this.syncEnvFile();
+    }
+
+    syncEnvFile() {
+        try {
+            const vaultPath = this.app.vault.adapter.getBasePath();
+            const activeModel = this.settings.llmProvider === 'ollama'
+                ? `litellm:ollama/${this.settings.ollamaModel || 'gemma3:4b'}`
+                : (this.settings.geminiModel || 'gemini-3.1-flash-lite');
+
+            const ollamaBase = this.settings.ollamaUrl || 'http://127.0.0.1:11434';
+            const apiKey = this.settings.geminiApiKey || '';
+
+            const envContent = `GEMINI_API_KEY=${apiKey}\nMODEL=${activeModel}\nOLLAMA_API_BASE=${ollamaBase}\nMEMORY_DB=memory.db\n`;
+
+            const envPaths = [
+                path.join(vaultPath, '04_Projects', 'always-on-memory-agent', '.env'),
+                path.join(vaultPath, '.obsidian', 'plugins', 'always-on-memory-agent', '.env')
+            ];
+
+            envPaths.forEach(p => {
+                try {
+                    fs.writeFileSync(p, envContent, 'utf-8');
+                } catch(e) {}
+            });
+        } catch(e) {
+            console.error('[Memory Agent] Failed to sync .env file:', e);
+        }
     }
 }
 
@@ -336,7 +367,10 @@ class AlwaysOnMemoryAgentSettingTab extends obsidian.PluginSettingTab {
     display() {
         const { containerEl } = this;
         containerEl.empty();
-        containerEl.createEl('h2', { text: 'Always-On Memory Agent Settings' });
+        containerEl.createEl('h2', { text: '🧠 Always-On Memory Agent Settings' });
+
+        // Service Controls Section
+        containerEl.createEl('h3', { text: '⚙️ Agent Service Controls' });
 
         new obsidian.Setting(containerEl)
             .setName('Auto-Start on Launch')
@@ -349,30 +383,12 @@ class AlwaysOnMemoryAgentSettingTab extends obsidian.PluginSettingTab {
                 }));
 
         new obsidian.Setting(containerEl)
-            .setName('Crawl & Index Vault')
-            .setDesc('Trigger an immediate re-index of vault notes into memory.db.')
-            .addButton(btn => btn
-                .setButtonText('Run Indexer Now')
-                .setCta()
-                .onClick(() => {
-                    this.plugin.runCrawl();
-                }));
-
-        new obsidian.Setting(containerEl)
-            .setName('Memory Dashboard')
-            .setDesc('Generate or refresh the visual Memory Agent dashboard note.')
-            .addButton(btn => btn
-                .setButtonText('Launch Dashboard')
-                .onClick(() => {
-                    this.plugin.launchDashboard();
-                }));
-
-        new obsidian.Setting(containerEl)
-            .setName('Agent Service Control')
-            .setDesc('Start or stop the Python memory agent background service.')
+            .setName('Agent Service Status')
+            .setDesc(this.plugin.agentProcess ? 'Status: Active (Process running in background)' : 'Status: Stopped')
             .addButton(btn => btn
                 .setButtonText(this.plugin.agentProcess ? 'Stop Agent' : 'Start Agent')
                 .setWarning(!!this.plugin.agentProcess)
+                .setCta(!this.plugin.agentProcess)
                 .onClick(() => {
                     if (this.plugin.agentProcess) {
                         this.plugin.stopAgent();
@@ -381,6 +397,110 @@ class AlwaysOnMemoryAgentSettingTab extends obsidian.PluginSettingTab {
                     }
                     this.display();
                 }));
+
+        new obsidian.Setting(containerEl)
+            .setName('Crawl & Index Vault')
+            .setDesc('Trigger an immediate re-index of vault notes into memory.db.')
+            .addButton(btn => btn
+                .setButtonText('Run Indexer Now')
+                .onClick(() => {
+                    this.plugin.runCrawl();
+                }));
+
+        // LLM Provider & Model Configuration Section
+        containerEl.createEl('h3', { text: '🤖 LLM Provider & Model Configuration' });
+
+        new obsidian.Setting(containerEl)
+            .setName('LLM Provider')
+            .setDesc('Choose whether to run on hosted Gemini API or local Ollama.')
+            .addDropdown(dropdown => dropdown
+                .addOption('gemini', 'Google Gemini API (Cloud)')
+                .addOption('ollama', 'Ollama (Local Instance)')
+                .setValue(this.plugin.settings.llmProvider)
+                .onChange(async (value) => {
+                    this.plugin.settings.llmProvider = value;
+                    await this.plugin.saveSettings();
+                    new obsidian.Notice(`LLM Provider set to: ${value.toUpperCase()}. If agent is running, restart agent to apply.`);
+                    this.display();
+                }));
+
+        if (this.plugin.settings.llmProvider === 'gemini') {
+            new obsidian.Setting(containerEl)
+                .setName('Gemini Model')
+                .setDesc('Select Gemini model variant.')
+                .addDropdown(dropdown => dropdown
+                    .addOption('gemini-3.1-flash-lite', 'Gemini 3.1 Flash-Lite (Fast & Cost-Effective)')
+                    .addOption('gemini-2.5-flash', 'Gemini 2.5 Flash')
+                    .addOption('gemini-2.5-pro', 'Gemini 2.5 Pro')
+                    .setValue(this.plugin.settings.geminiModel)
+                    .onChange(async (value) => {
+                        this.plugin.settings.geminiModel = value;
+                        await this.plugin.saveSettings();
+                    }))
+                .addText(text => text
+                    .setPlaceholder('Custom Gemini model name...')
+                    .setValue(this.plugin.settings.geminiModel)
+                    .onChange(async (value) => {
+                        if (value.trim()) {
+                            this.plugin.settings.geminiModel = value.trim();
+                            await this.plugin.saveSettings();
+                        }
+                    }));
+
+            new obsidian.Setting(containerEl)
+                .setName('Gemini API Key')
+                .setDesc('Stored securely in environment file.')
+                .addText(text => text
+                    .setPlaceholder('Enter Gemini API key...')
+                    .setValue(this.plugin.settings.geminiApiKey)
+                    .onChange(async (value) => {
+                        this.plugin.settings.geminiApiKey = value.trim();
+                        await this.plugin.saveSettings();
+                    }));
+        } else {
+            new obsidian.Setting(containerEl)
+                .setName('Ollama Local Model')
+                .setDesc('Select or enter local Ollama model identifier.')
+                .addDropdown(dropdown => dropdown
+                    .addOption('gemma3:4b', 'gemma3:4b (Current Active Local Model)')
+                    .addOption('llama3.2', 'llama3.2')
+                    .addOption('mistral', 'mistral')
+                    .addOption('qwen2.5', 'qwen2.5')
+                    .setValue(this.plugin.settings.ollamaModel)
+                    .onChange(async (value) => {
+                        this.plugin.settings.ollamaModel = value;
+                        await this.plugin.saveSettings();
+                    }))
+                .addText(text => text
+                    .setPlaceholder('Or type custom model tag (e.g. gemma3:4b)...')
+                    .setValue(this.plugin.settings.ollamaModel)
+                    .onChange(async (value) => {
+                        if (value.trim()) {
+                            this.plugin.settings.ollamaModel = value.trim();
+                            await this.plugin.saveSettings();
+                        }
+                    }));
+
+            new obsidian.Setting(containerEl)
+                .setName('Ollama Server Base URL')
+                .setDesc('Endpoint for local Ollama API instance.')
+                .addText(text => text
+                    .setPlaceholder('http://127.0.0.1:11434')
+                    .setValue(this.plugin.settings.ollamaUrl)
+                    .onChange(async (value) => {
+                        this.plugin.settings.ollamaUrl = value.trim();
+                        await this.plugin.saveSettings();
+                    }));
+        }
+
+        // Active Configuration Display
+        const activeModelStr = this.plugin.settings.llmProvider === 'ollama'
+            ? `litellm:ollama/${this.plugin.settings.ollamaModel || 'gemma3:4b'}`
+            : (this.plugin.settings.geminiModel || 'gemini-3.1-flash-lite');
+
+        new obsidian.Setting(containerEl)
+            .setName('Active Environment Summary')
+            .setDesc(`Target Model: MODEL=${activeModelStr} | Env File: Synced ✅`);
     }
 }
 
