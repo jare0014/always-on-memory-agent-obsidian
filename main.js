@@ -212,9 +212,9 @@ class AlwaysOnMemoryAgentPlugin extends obsidian.Plugin {
         let geminiApiKey = '';
         if (this.app.secretStorage) {
             try {
-                geminiApiKey = await this.app.secretStorage.getSecret('schedule-assistant-gemini-api-key') || 
-                               await this.app.secretStorage.getSecret('timeblocker-gemini-api-key') || 
-                               await this.app.secretStorage.getSecret('always-on-memory-gemini-api-key') || '';
+                geminiApiKey = await this.app.secretStorage.getSecret('always-on-memory-gemini-api-key') || 
+                               await this.app.secretStorage.getSecret('schedule-assistant-gemini-api-key') || 
+                               await this.app.secretStorage.getSecret('timeblocker-gemini-api-key') || '';
             } catch(e) {}
         }
         if (!geminiApiKey) {
