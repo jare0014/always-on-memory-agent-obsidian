@@ -270,22 +270,40 @@ class AlwaysOnMemoryAgentPlugin extends obsidian.Plugin {
         });
     }
 
-    launchDashboard() {
-        const pythonCmd = this.getPythonCmd();
-        const scriptPath = this.getScriptPath('dashboard.py');
-        const projectDir = path.dirname(scriptPath);
+    async launchDashboard() {
+        new obsidian.Notice('Opening Memory Dashboard in Side Panel...');
 
-        new obsidian.Notice('Launching Memory Dashboard...');
+        const dashboardNotePath = '03_Knowledge/🧠 Memory Agent Dashboard.md';
+        const templateFile = this.getScriptPath('obsidian_dashboard_template.md');
+        let templateContent = '';
 
-        child_process.execFile(pythonCmd, [scriptPath], { cwd: projectDir, env: { ...process.env, PYTHONIOENCODING: 'utf-8' } }, (error, stdout, stderr) => {
-            if (error) {
-                console.error('[Memory Dashboard Error]', stderr || error.message);
-                new obsidian.Notice(`Dashboard Launch Error: ${error.message}`);
-                return;
+        if (fs.existsSync(templateFile)) {
+            const raw = fs.readFileSync(templateFile, 'utf-8');
+            const match = raw.match(/```dataviewjs[\s\S]*?```/);
+            if (match) {
+                templateContent = `# 🧠 Always-On Memory Agent Dashboard\n\n${match[0]}`;
             }
-            console.log('[Memory Dashboard Output]', stdout);
-            new obsidian.Notice('Memory Dashboard generated!');
-        });
+        }
+
+        if (!templateContent) {
+            templateContent = `# 🧠 Always-On Memory Agent Dashboard\n\n\`\`\`dataviewjs\nconst agentUrl = "http://localhost:8888";\nconst statsRes = await requestUrl({ url: \`\${agentUrl}/status\`, method: "GET" }).catch(() => null);\nif (!statsRes) {\n    dv.paragraph("❌ **Always-On Memory Agent is offline**.<br>Please start the agent backend (\`python agent.py\`) first.");\n} else {\n    const stats = JSON.parse(statsRes.text);\n    dv.paragraph(\`🟢 **Memory Agent Online** | Total Memories: **\${stats.total_memories}** | Pending Consolidation: **\${stats.unconsolidated}** | Consolidations: **\${stats.consolidations}**\`);\n}\n\`\`\``;
+        }
+
+        let tFile = this.app.vault.getAbstractFileByPath(dashboardNotePath);
+        if (!tFile) {
+            tFile = await this.app.vault.create(dashboardNotePath, templateContent);
+        }
+
+        // Open in Right Side Panel
+        let leaf = this.app.workspace.getRightLeaf(false);
+        if (!leaf) {
+            leaf = this.app.workspace.getLeaf('split', 'vertical');
+        }
+
+        await leaf.openFile(tFile);
+        this.app.workspace.revealLeaf(leaf);
+
+        new obsidian.Notice('Memory Agent Dashboard active in Side Panel!');
     }
 
     showMenu(evt) {
