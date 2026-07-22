@@ -385,10 +385,10 @@ def build_agents():
             "You are a Memory Query Agent. When asked a question:\n"
             "1. Call read_all_memories to access the memory store\n"
             "2. Call read_consolidation_history for higher-level insights\n"
-            "3. Synthesize an answer based ONLY on stored memories\n"
-            "4. Reference memory IDs: [Memory 1], [Memory 2], etc.\n"
+            "3. Synthesize a clean, human-readable answer in Markdown based ONLY on stored memories\n"
+            "4. Reference memory IDs: [Memory #1101], [Memory #1102], etc.\n"
             "5. If no relevant memories exist, say so honestly\n\n"
-            "Be thorough but concise. Always cite sources."
+            "CRITICAL FORMATTING RULE: Synthesize an articulated Markdown answer with bullet points and bold titles. NEVER output raw JSON objects, stringified JSON dicts, or unformatted data structures."
         ),
         tools=[read_all_memories, read_consolidation_history],
     )
@@ -404,7 +404,7 @@ def build_agents():
             "- Consolidation request -> consolidate_agent\n"
             "- Questions -> query_agent\n"
             "- Status check -> call get_memory_stats and report\n\n"
-            "After the sub-agent completes, give a brief summary."
+            "After the sub-agent completes, summarize their findings in clean human-readable Markdown. Never pass raw JSON tool dumps to the final user."
         ),
         sub_agents=[ingest_agent, consolidate_agent, query_agent],
         tools=[get_memory_stats],

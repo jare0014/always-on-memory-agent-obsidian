@@ -154,9 +154,31 @@ if (!statsRes) {
                 method: "GET"
             });
             const data = JSON.parse(response.text);
-            
+            let answerText = data.answer || "";
+
+            try {
+                if (answerText.trim().startsWith('{')) {
+                    const parsed = JSON.parse(answerText);
+                    const items = parsed.results || parsed.memories || (Array.isArray(parsed) ? parsed : null);
+                    if (items && Array.isArray(items)) {
+                        let html = parsed.query ? `<p style="margin-bottom:8px;"><strong>🔍 Query:</strong> ${parsed.query}</p>` : '';
+                        items.forEach(m => {
+                            html += `<div class="memory-card">`;
+                            html += `<div style="display:flex; justify-content:space-between; font-size: 11px; color: var(--text-muted);"><span>Memory #${m.id || '?'}</span><span>${m.source || 'Unknown'}</span></div>`;
+                            html += `<p style="margin: 6px 0; font-size: 13px;">${m.summary || m.raw_text || 'No summary'}</p>`;
+                            if (m.topics && Array.isArray(m.topics)) {
+                                html += `<div>${m.topics.map(t => `<span class="memory-tag">${t}</span>`).join('')}</div>`;
+                            }
+                            html += `</div>`;
+                        });
+                        resultEl.innerHTML = html;
+                        return;
+                    }
+                }
+            } catch(err) {}
+
             // Clean markdown structure rendering
-            resultEl.innerHTML = data.answer.replace(/\n/g, "<br>");
+            resultEl.innerHTML = answerText.replace(/\n/g, "<br>");
         } catch (e) {
             resultEl.setText("Error querying memory agent: " + e.message);
         }

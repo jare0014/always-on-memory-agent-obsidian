@@ -295,6 +295,8 @@ class AlwaysOnMemoryAgentPlugin extends obsidian.Plugin {
         let tFile = this.app.vault.getAbstractFileByPath(dashboardNotePath);
         if (!tFile) {
             tFile = await this.app.vault.create(dashboardNotePath, templateContent);
+        } else {
+            await this.app.vault.modify(tFile, templateContent);
         }
 
         let leaf = this.app.workspace.getRightLeaf(false);
