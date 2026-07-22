@@ -482,11 +482,11 @@ class AlwaysOnMemoryAgentSettingTab extends obsidian.PluginSettingTab {
                     }));
 
             new obsidian.Setting(containerEl)
-                .setName('Ollama Server Base URL')
-                .setDesc('Endpoint for local Ollama API instance.')
+                .setName('Ollama Server Base URL (VPN / Custom Endpoint)')
+                .setDesc('Base URL and VPN port for your Ollama instance (e.g. http://100.x.y.z:11434, http://vpn-host:11434, or http://127.0.0.1:11434).')
                 .addText(text => text
-                    .setPlaceholder('http://127.0.0.1:11434')
-                    .setValue(this.plugin.settings.ollamaUrl)
+                    .setPlaceholder('e.g. http://100.64.0.1:11434 or http://127.0.0.1:11434')
+                    .setValue(this.plugin.settings.ollamaUrl || 'http://127.0.0.1:11434')
                     .onChange(async (value) => {
                         this.plugin.settings.ollamaUrl = value.trim();
                         await this.plugin.saveSettings();
@@ -498,9 +498,13 @@ class AlwaysOnMemoryAgentSettingTab extends obsidian.PluginSettingTab {
             ? `litellm:ollama/${this.plugin.settings.ollamaModel || 'gemma3:4b'}`
             : (this.plugin.settings.geminiModel || 'gemini-3.1-flash-lite');
 
+        const activeEndpointStr = this.plugin.settings.llmProvider === 'ollama'
+            ? (this.plugin.settings.ollamaUrl || 'http://127.0.0.1:11434')
+            : 'Google Gemini Cloud API';
+
         new obsidian.Setting(containerEl)
             .setName('Active Environment Summary')
-            .setDesc(`Target Model: MODEL=${activeModelStr} | Env File: Synced ✅`);
+            .setDesc(`Model: ${activeModelStr} | Endpoint: ${activeEndpointStr} | .env Synced ✅`);
     }
 }
 
