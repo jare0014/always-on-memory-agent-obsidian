@@ -24,7 +24,10 @@ class AlwaysOnMemoryAgentPlugin extends obsidian.Plugin {
 
         // Create Status Bar Item
         this.statusBarItem = this.addStatusBarItem();
-        this.updateStatus('Stopped');
+        this.checkServiceHealth();
+        this.registerInterval(
+            window.setInterval(() => this.checkServiceHealth(), 15 * 1000)
+        );
 
         // Add Settings Tab (Renders in Settings Sidebar)
         this.addSettingTab(new AlwaysOnMemoryAgentSettingTab(this.app, this));
@@ -201,6 +204,22 @@ class AlwaysOnMemoryAgentPlugin extends obsidian.Plugin {
         if (!this.statusBarItem) return;
         const icon = isBusy ? '⏳' : (statusText === 'Running' ? '🧠' : '💤');
         this.statusBarItem.setText(`${icon} Memory Agent: ${statusText}`);
+    }
+
+    async checkServiceHealth() {
+        try {
+            const res = await obsidian.requestUrl({ url: 'http://localhost:8888/status', method: 'GET' });
+            if (res.status === 200) {
+                this.isServiceRunning = true;
+                this.updateStatus('Running');
+            } else {
+                this.isServiceRunning = !!this.agentProcess;
+                this.updateStatus(this.isServiceRunning ? 'Running' : 'Stopped');
+            }
+        } catch(e) {
+            this.isServiceRunning = !!this.agentProcess;
+            this.updateStatus(this.isServiceRunning ? 'Running' : 'Stopped');
+        }
     }
 
     async startAgent() {
@@ -388,15 +407,16 @@ class AlwaysOnMemoryAgentSettingTab extends obsidian.PluginSettingTab {
                     await this.plugin.saveSettings();
                 }));
 
+        const isActive = this.plugin.isServiceRunning || !!this.plugin.agentProcess;
         new obsidian.Setting(containerEl)
             .setName('Agent Service Status')
-            .setDesc(this.plugin.agentProcess ? 'Status: Active (Process running in background)' : 'Status: Stopped')
+            .setDesc(isActive ? 'Status: Active (Service online on port 8888)' : 'Status: Stopped')
             .addButton(btn => btn
-                .setButtonText(this.plugin.agentProcess ? 'Stop Agent' : 'Start Agent')
-                .setWarning(!!this.plugin.agentProcess)
-                .setCta(!this.plugin.agentProcess)
+                .setButtonText(isActive ? 'Stop Agent' : 'Start Agent')
+                .setWarning(isActive)
+                .setCta(!isActive)
                 .onClick(() => {
-                    if (this.plugin.agentProcess) {
+                    if (isActive) {
                         this.plugin.stopAgent();
                     } else {
                         this.plugin.startAgent();
