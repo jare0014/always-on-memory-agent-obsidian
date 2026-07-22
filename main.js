@@ -658,7 +658,7 @@ class MemoryAgentView extends obsidian.ItemView {
         recentHeader.createEl('h4', { text: '🧠 Recent Memories & Insights', style: 'margin:0;' });
         const refreshMemoriesBtn = recentHeader.createEl('button', { text: '↻ Refresh', style: 'font-size:0.8em; padding:2px 8px;' });
 
-        const cardsContainer = recentSection.createDiv({ style: 'display:flex; flex-direction:column; gap:8px;' });
+        const cardsContainer = recentSection.createDiv({ style: 'display:flex; flex-direction:column; gap:12px; margin-top:8px;' });
 
         const loadRecentMemories = async () => {
             cardsContainer.empty();
@@ -674,18 +674,23 @@ class MemoryAgentView extends obsidian.ItemView {
                         return;
                     }
                     memories.slice(0, 6).forEach(m => {
-                        const card = cardsContainer.createDiv({ style: 'border-left:3px solid var(--interactive-accent); padding:8px 10px; background:var(--background-secondary); border-radius:0 6px 6px 0; font-size:0.85em;' });
+                        const card = cardsContainer.createDiv({ 
+                            style: 'border:1px solid var(--background-modifier-border); border-left:4px solid var(--interactive-accent); padding:12px 14px; background:var(--background-secondary-alt); border-radius:8px; font-size:0.85em; box-shadow:0 2px 6px rgba(0,0,0,0.12); margin-bottom:4px;' 
+                        });
                         
-                        const cardMeta = card.createDiv({ style: 'display:flex; justify-content:space-between; font-size:0.8em; color:var(--text-muted); margin-bottom:4px;' });
-                        cardMeta.createSpan({ text: `Memory #${m.id}` });
+                        const cardMeta = card.createDiv({ style: 'display:flex; justify-content:space-between; align-items:center; font-size:0.8em; color:var(--text-muted); margin-bottom:6px; font-weight:600;' });
+                        cardMeta.createSpan({ text: `Memory #${m.id}`, style: 'color:var(--interactive-accent); font-weight:bold;' });
                         cardMeta.createSpan({ text: `${m.source || 'Vault'} • ${(m.created_at || '').substring(0, 10)}` });
 
-                        card.createEl('p', { text: m.summary || m.raw_text || 'No summary available.', style: 'margin:0 0 6px 0; line-height:1.4; color:var(--text-normal);' });
+                        card.createEl('p', { text: m.summary || m.raw_text || 'No summary available.', style: 'margin:0 0 8px 0; line-height:1.45; color:var(--text-normal); font-size:0.95em;' });
 
                         if (m.topics && Array.isArray(m.topics) && m.topics.length > 0) {
-                            const tagsDiv = card.createDiv({ style: 'display:flex; flex-wrap:wrap; gap:4px;' });
+                            const tagsDiv = card.createDiv({ style: 'display:flex; flex-wrap:wrap; gap:5px; margin-top:4px;' });
                             m.topics.forEach(tag => {
-                                tagsDiv.createSpan({ text: `#${tag}`, style: 'background:var(--background-modifier-border); padding:1px 5px; border-radius:3px; font-size:0.75em; color:var(--text-muted);' });
+                                tagsDiv.createSpan({ 
+                                    text: `#${tag}`, 
+                                    style: 'background:rgba(var(--color-accent-rgb), 0.12); color:var(--text-accent); border:1px solid rgba(var(--color-accent-rgb), 0.25); padding:2px 7px; border-radius:12px; font-size:0.75em; font-weight:500;' 
+                                });
                             });
                         }
                     });
