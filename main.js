@@ -703,7 +703,8 @@ class MemoryAgentView extends obsidian.ItemView {
                         return;
                     }
                     memories.slice(0, 6).forEach(m => {
-                        const card = cardsContainer.createDiv({ cls: 'always-on-memory-card' });
+                        const card = cardsContainer.createDiv();
+                        card.style.cssText = 'display:block !important; border:1px solid var(--background-modifier-border, #3a3a3c) !important; border-left:4px solid var(--interactive-accent, #7b61ff) !important; padding:12px 14px !important; background:var(--background-secondary-alt, var(--background-secondary, #242426)) !important; border-radius:8px !important; font-size:0.85em; box-shadow:0 4px 10px rgba(0,0,0,0.25) !important; margin-bottom:12px !important;';
                         
                         const cardMeta = card.createDiv({ style: 'display:flex; justify-content:space-between; align-items:center; font-size:0.8em; color:var(--text-muted, #8e8e93); margin-bottom:6px; font-weight:600;' });
                         cardMeta.createSpan({ text: `Memory #${m.id}`, style: 'color:var(--interactive-accent, #7b61ff); font-weight:bold;' });
@@ -714,10 +715,8 @@ class MemoryAgentView extends obsidian.ItemView {
                         if (m.topics && Array.isArray(m.topics) && m.topics.length > 0) {
                             const tagsDiv = card.createDiv({ style: 'display:flex; flex-wrap:wrap; gap:5px; margin-top:4px;' });
                             m.topics.forEach(tag => {
-                                tagsDiv.createSpan({ 
-                                    text: `#${tag}`, 
-                                    cls: 'always-on-memory-tag'
-                                });
+                                const tagSpan = tagsDiv.createSpan({ text: `#${tag}` });
+                                tagSpan.style.cssText = 'display:inline-block !important; background:rgba(123, 97, 255, 0.2) !important; color:var(--text-accent, #a792ff) !important; border:1px solid rgba(123, 97, 255, 0.4) !important; padding:2px 8px !important; border-radius:12px !important; font-size:0.75em !important; font-weight:500 !important;';
                             });
                         }
                     });
