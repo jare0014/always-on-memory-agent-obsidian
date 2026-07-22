@@ -12,10 +12,15 @@ const DEFAULT_SETTINGS = {
     geminiApiKey: ''
 };
 
+const MEMORY_VIEW_TYPE = 'always-on-memory-agent-view';
+
 class AlwaysOnMemoryAgentPlugin extends obsidian.Plugin {
     async onload() {
         console.log('[Always-On Memory Agent] Loading plugin...');
         await this.loadSettings();
+
+        // Register Native Sidebar View
+        this.registerView(MEMORY_VIEW_TYPE, (leaf) => new MemoryAgentView(leaf, this));
 
         // Create Status Bar Item
         this.statusBarItem = this.addStatusBarItem();
@@ -300,40 +305,13 @@ class AlwaysOnMemoryAgentPlugin extends obsidian.Plugin {
     }
 
     async launchDashboard() {
-        new obsidian.Notice('Opening Memory Dashboard in Side Panel...');
-
-        const dashboardNotePath = '03_Knowledge/🧠 Memory Agent Dashboard.md';
-        const templateFile = this.getScriptPath('obsidian_dashboard_template.md');
-        let templateContent = '';
-
-        if (fs.existsSync(templateFile)) {
-            const raw = fs.readFileSync(templateFile, 'utf-8');
-            const match = raw.match(/```dataviewjs[\s\S]*?```/);
-            if (match) {
-                templateContent = `# 🧠 Always-On Memory Agent Dashboard\n\n${match[0]}`;
-            }
-        }
-
-        if (!templateContent) {
-            templateContent = `# 🧠 Always-On Memory Agent Dashboard\n\n\`\`\`dataviewjs\nconst agentUrl = "http://localhost:8888";\nconst statsRes = await requestUrl({ url: \`\${agentUrl}/status\`, method: "GET" }).catch(() => null);\nif (!statsRes) {\n    dv.paragraph("❌ **Always-On Memory Agent is offline**.<br>Please start the agent backend (\`python agent.py\`) first.");\n} else {\n    const stats = JSON.parse(statsRes.text);\n    dv.paragraph(\`🟢 **Memory Agent Online** | Total Memories: **\${stats.total_memories}** | Pending Consolidation: **\${stats.unconsolidated}** | Consolidations: **\${stats.consolidations}**\`);\n}\n\`\`\``;
-        }
-
-        let tFile = this.app.vault.getAbstractFileByPath(dashboardNotePath);
-        if (!tFile) {
-            tFile = await this.app.vault.create(dashboardNotePath, templateContent);
-        } else {
-            await this.app.vault.modify(tFile, templateContent);
-        }
-
-        let leaf = this.app.workspace.getRightLeaf(false);
+        let leaf = this.app.workspace.getLeavesOfType(MEMORY_VIEW_TYPE)[0];
         if (!leaf) {
-            leaf = this.app.workspace.getLeaf('split', 'vertical');
+            leaf = this.app.workspace.getRightLeaf(false) || this.app.workspace.getLeaf('split', 'vertical');
+            await leaf.setViewState({ type: MEMORY_VIEW_TYPE, active: true });
         }
-
-        await leaf.openFile(tFile);
         this.app.workspace.revealLeaf(leaf);
-
-        new obsidian.Notice('Memory Agent Dashboard active in Side Panel!');
+        new obsidian.Notice('Memory Agent Side Panel active!');
     }
 
     showMenu(evt) {
@@ -578,6 +556,123 @@ class AlwaysOnMemoryAgentSettingTab extends obsidian.PluginSettingTab {
         new obsidian.Setting(containerEl)
             .setName('Active Environment Summary')
             .setDesc(`Model: ${activeModelStr} | Endpoint: ${activeEndpointStr} | .env Synced ✅`);
+    }
+}
+
+class MemoryAgentView extends obsidian.ItemView {
+    constructor(leaf, plugin) {
+        super(leaf);
+        this.plugin = plugin;
+    }
+
+    getViewType() {
+        return MEMORY_VIEW_TYPE;
+    }
+
+    getDisplayText() {
+        return 'Always-On Memory Agent';
+    }
+
+    getIcon() {
+        return 'brain';
+    }
+
+    async onOpen() {
+        const container = this.containerEl.children[1];
+        container.empty();
+        container.classList.add('always-on-memory-view');
+        container.style.padding = '15px';
+        container.style.overflowY = 'auto';
+
+        // Header
+        const header = container.createDiv({ style: 'margin-bottom:15px; border-bottom:1px solid var(--background-modifier-border); padding-bottom:10px;' });
+        header.createEl('h3', { text: '🧠 Memory Agent Side Panel', style: 'margin:0 0 5px 0;' });
+        const statusSpan = header.createEl('span', { text: 'Checking connection...', style: 'font-size:0.85em; color:var(--text-muted);' });
+
+        // Memory Stats Card
+        const statsCard = container.createDiv({ style: 'background:var(--background-secondary); padding:10px 12px; border-radius:8px; margin-bottom:15px; border:1px solid var(--background-modifier-border);' });
+        const statsText = statsCard.createEl('div', { text: 'Loading stats...', style: 'font-size:0.9em;' });
+
+        const refreshStats = async () => {
+            try {
+                const res = await obsidian.requestUrl({ url: 'http://localhost:8888/status', method: 'GET' });
+                if (res.status === 200) {
+                    const stats = JSON.parse(res.text);
+                    statusSpan.setText('🟢 Memory Service Online');
+                    statusSpan.style.color = '#30d158';
+                    statsText.innerHTML = `Memories: <b>${stats.total_memories || 0}</b> | Pending: <b>${stats.unconsolidated || 0}</b> | Consolidations: <b>${stats.consolidations || 0}</b>`;
+                } else {
+                    statusSpan.setText('❌ Service Offline');
+                    statusSpan.style.color = '#ff453a';
+                    statsText.setText('Service offline. Please start the background agent service in settings or ribbon menu.');
+                }
+            } catch (e) {
+                statusSpan.setText('❌ Service Offline');
+                statusSpan.style.color = '#ff453a';
+                statsText.setText('Service offline. Please start the background agent service in settings or ribbon menu.');
+            }
+        };
+        refreshStats();
+
+        // Section: Search & Query Memory
+        const querySection = container.createDiv({ style: 'margin-bottom:15px; border:1px solid var(--background-modifier-border); border-radius:8px; padding:12px; background:var(--background-primary);' });
+        querySection.createEl('h4', { text: '🔍 Search & Query Memory', style: 'margin:0 0 8px 0;' });
+        
+        const queryRow = querySection.createDiv({ style: 'display:flex; gap:6px; margin-bottom:8px;' });
+        const queryInput = queryRow.createEl('input', { type: 'text', placeholder: 'Ask your memory agent...', style: 'flex:1; padding:6px 10px; border-radius:6px; border:1px solid var(--background-modifier-border); background:var(--background-secondary); color:var(--text-normal);' });
+        const queryBtn = queryRow.createEl('button', { text: 'Ask', cls: 'mod-cta' });
+        
+        const resultBox = querySection.createDiv({ style: 'display:none; margin-top:10px; padding:10px; border-radius:6px; background:var(--background-secondary); border-left:3px solid var(--interactive-accent); font-size:0.9em; line-height:1.5; white-space:pre-wrap;' });
+
+        const executeQuery = async () => {
+            const q = queryInput.value.trim();
+            if (!q) return;
+            queryBtn.setText('Querying...');
+            resultBox.style.display = 'block';
+            resultBox.setText('Thinking...');
+            try {
+                const res = await obsidian.requestUrl({ url: `http://localhost:8888/query?q=${encodeURIComponent(q)}`, method: 'GET' });
+                if (res.status === 200) {
+                    const data = JSON.parse(res.text);
+                    resultBox.setText(data.answer || 'No answer returned.');
+                } else if (res.status === 401) {
+                    resultBox.setText('⚠️ API Key Error: Please enter a valid Gemini API key in Always-On Memory Agent settings.');
+                } else {
+                    resultBox.setText(`❌ Error: ${res.text}`);
+                }
+            } catch (e) {
+                resultBox.setText(`❌ Query Failed: ${e.message}`);
+            } finally {
+                queryBtn.setText('Ask');
+            }
+        };
+
+        queryBtn.onclick = executeQuery;
+        queryInput.onkeydown = (e) => {
+            if (e.key === 'Enter') executeQuery();
+        };
+
+        // Section: Agent Controls
+        const actionsSection = container.createDiv({ style: 'display:flex; flex-direction:column; gap:8px;' });
+        const crawlBtn = actionsSection.createEl('button', { text: '🔄 Crawl & Index Vault Now' });
+        crawlBtn.onclick = () => {
+            this.plugin.runCrawl();
+            setTimeout(refreshStats, 3000);
+        };
+
+        const consolidateBtn = actionsSection.createEl('button', { text: '🧩 Consolidate Memories Now' });
+        consolidateBtn.onclick = async () => {
+            consolidateBtn.setText('Consolidating...');
+            try {
+                const res = await obsidian.requestUrl({ url: 'http://localhost:8888/consolidate', method: 'POST' });
+                new obsidian.Notice('Consolidation complete!');
+            } catch(e) {
+                new obsidian.Notice(`Consolidation failed: ${e.message}`);
+            } finally {
+                consolidateBtn.setText('🧩 Consolidate Memories Now');
+                refreshStats();
+            }
+        };
     }
 }
 
