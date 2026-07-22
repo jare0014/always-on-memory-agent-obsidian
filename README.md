@@ -8,15 +8,16 @@ An always-on personal memory and intelligence layer that runs continuously in th
 
 ## 🚀 Key Features
 
-* **Continuous Auto-Watch & Inbox Ingestion:** Monitors inbox folders for new text, PDFs, images, or audio files and automatically ingests them into vector memory.
-* **Multimodal Document Parsing:** Direct PDF, image, audio, and text ingestion without heavy local OCR dependencies—utilizing Gemini 3.5 Flash-Lite's 1M+ multimodal context window.
-* **Specialist Agent Architecture:** Powered by Google ADK multi-agent orchestrator:
+*   **Continuous Auto-Watch & Inbox Ingestion:** Monitors inbox folders for new text, PDFs, images, or audio files and automatically ingests them into vector memory.
+*   **Automatic Startup Vault Crawling:** Automatically triggers a background vault crawl sweep 5 seconds after startup, ensuring notes created or modified while Obsidian was closed are immediately indexed.
+*   **Multimodal Document Parsing:** Direct PDF, image, audio, and text ingestion without heavy local OCR dependencies—utilizing Gemini 3.5 Flash-Lite's 1M+ multimodal context window.
+*   **Specialist Agent Architecture:** Powered by Google ADK multi-agent orchestrator:
   * 📥 **Ingest Agent**: Extracts entities, topic tags, importance ratings, and semantic summaries.
   * 🔍 **Query Agent**: Synthesizes clean Markdown responses with exact memory citations (`[Memory #102]`).
   * 🔄 **Consolidation Agent**: Discovers cross-note connections and high-level patterns across temporal memories.
-* **Obsidian Sidebar Dashboard & Control Panel:** Native Obsidian sidebar view displaying memory stats, search interfaces, consolidation logs, and manual index controls.
-* **Keychain Security Integration:** Zero plain-text API key storage on disk. Dynamically retrieves credentials from **Windows Credential Manager / Obsidian SecretStorage** at runtime.
-* **Local Compute Fallback:** Toggle seamlessly between **Google Gemini (Cloud)** and **Local Ollama (`qwen2.5:7b` / `gemma3:4b`)** from Obsidian plugin settings.
+*   **Zero-Flicker Native Sidebar View (`MemoryAgentView`):** Native `obsidian.ItemView` side panel with high-contrast card borders, 3D shadows, tag pills, memory search interface, real-time HTTP health pings, and zero JavaScript code flicker.
+*   **Keychain Security Integration:** Zero plain-text API key storage on disk. Dynamically retrieves credentials from **Windows Credential Manager / Obsidian SecretStorage** at runtime.
+*   **Local Compute Fallback:** Toggle seamlessly between **Google Gemini (Cloud)** and **Local Ollama (`qwen2.5:7b` / `gemma3:4b`)** from Obsidian plugin settings.
 
 ---
 
