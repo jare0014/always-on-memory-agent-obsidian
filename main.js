@@ -70,6 +70,10 @@ class AlwaysOnMemoryAgentPlugin extends obsidian.Plugin {
 
         if (this.settings.autoStartOnLaunch) {
             this.startAgent();
+            // Automatically run background vault crawl 5 seconds after startup
+            setTimeout(() => {
+                this.runCrawl();
+            }, 5000);
         }
     }
 
