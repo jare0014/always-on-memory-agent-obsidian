@@ -489,16 +489,42 @@ class AlwaysOnMemoryAgentSettingTab extends obsidian.PluginSettingTab {
                         }));
             }
 
-            new obsidian.Setting(containerEl)
+            const geminiKeySetting = new obsidian.Setting(containerEl)
                 .setName('Gemini API Key')
-                .setDesc('Stored securely in environment file.')
-                .addText(text => text
-                    .setPlaceholder('Enter Gemini API key...')
-                    .setValue(this.plugin.settings.geminiApiKey)
-                    .onChange(async (value) => {
-                        this.plugin.settings.geminiApiKey = value.trim();
+                .setDesc('Stored securely in Windows Keychain / OS SecretStorage.')
+                .addText(text => {
+                    text.inputEl.type = 'password';
+                    text.setPlaceholder('Enter Gemini API key...');
+                    if (this.app.secretStorage) {
+                        this.app.secretStorage.getSecret('always-on-memory-gemini-api-key').then(secret => {
+                            if (!secret) {
+                                this.app.secretStorage.getSecret('schedule-assistant-gemini-api-key').then(sec => text.setValue(sec || ''));
+                            } else {
+                                text.setValue(secret || '');
+                            }
+                        });
+                    } else {
+                        text.setValue(this.plugin.settings.geminiApiKey || '');
+                    }
+                    text.onChange(async (value) => {
+                        const trimmed = value.trim();
+                        if (this.app.secretStorage) {
+                            await this.app.secretStorage.setSecret('always-on-memory-gemini-api-key', trimmed);
+                        }
+                        this.plugin.settings.geminiApiKey = ''; // Never save plain-text to data.json
                         await this.plugin.saveSettings();
-                    }));
+                    });
+                });
+            
+            const geminiBadge = createStatusBadge(geminiKeySetting.nameEl);
+            (async () => {
+                let key = '';
+                if (this.app.secretStorage) {
+                    key = await this.app.secretStorage.getSecret('always-on-memory-gemini-api-key') || 
+                          await this.app.secretStorage.getSecret('schedule-assistant-gemini-api-key') || '';
+                }
+                updateBadge(geminiBadge, !!key, key ? 'Keychain: Connected' : 'Keychain: Key Missing');
+            })();
         } else {
             new obsidian.Setting(containerEl)
                 .setName('Ollama Local Model')
