@@ -594,8 +594,13 @@ def build_http(agent: MemoryAgent, watch_path: str = "./inbox"):
             answer = await agent.query(q)
             return web.json_response({"question": q, "answer": answer})
         except Exception as e:
-            log.error(f"Error handling query: {e}")
-            return web.json_response({"error": str(e)}, status=500)
+            err_msg = str(e)
+            log.error(f"Error handling query: {err_msg}")
+            if "401" in err_msg or "UNAUTHENTICATED" in err_msg or "No API key" in err_msg:
+                return web.json_response({
+                    "error": "Gemini API key invalid or unauthenticated (401). Please enter your valid Gemini API key in Always-On Memory Agent settings in Obsidian."
+                }, status=401)
+            return web.json_response({"error": err_msg}, status=500)
 
     async def handle_ingest(request: web.Request):
         try:
