@@ -448,29 +448,46 @@ class AlwaysOnMemoryAgentSettingTab extends obsidian.PluginSettingTab {
                 }));
 
         if (this.plugin.settings.llmProvider === 'gemini') {
+            const geminiPresetOptions = ['gemini-3.5-flash-lite', 'gemini-3.5-flash', 'gemini-3.1-flash-lite', 'gemini-2.5-flash', 'gemini-2.5-pro'];
+            let currentGeminiVal = this.plugin.settings.geminiModel || 'gemini-3.5-flash-lite';
+            let isGeminiCustom = (!geminiPresetOptions.includes(currentGeminiVal) && currentGeminiVal !== '') || currentGeminiVal === 'custom';
+
             new obsidian.Setting(containerEl)
                 .setName('Gemini Model')
                 .setDesc('Select Gemini model variant.')
-                .addDropdown(dropdown => dropdown
-                    .addOption('gemini-3.5-flash-lite', 'Gemini 3.5 Flash-Lite (Fast & Ultra-Light)')
-                    .addOption('gemini-3.5-flash', 'Gemini 3.5 Flash')
-                    .addOption('gemini-3.1-flash-lite', 'Gemini 3.1 Flash-Lite')
-                    .addOption('gemini-2.5-flash', 'Gemini 2.5 Flash')
-                    .addOption('gemini-2.5-pro', 'Gemini 2.5 Pro')
-                    .setValue(this.plugin.settings.geminiModel)
-                    .onChange(async (value) => {
-                        this.plugin.settings.geminiModel = value;
-                        await this.plugin.saveSettings();
-                    }))
-                .addText(text => text
-                    .setPlaceholder('Custom Gemini model name...')
-                    .setValue(this.plugin.settings.geminiModel)
-                    .onChange(async (value) => {
-                        if (value.trim()) {
+                .addDropdown(dropdown => {
+                    dropdown
+                        .addOption('gemini-3.5-flash-lite', 'Gemini 3.5 Flash-Lite (Fast & Ultra-Light)')
+                        .addOption('gemini-3.5-flash', 'Gemini 3.5 Flash')
+                        .addOption('gemini-3.1-flash-lite', 'Gemini 3.1 Flash-Lite')
+                        .addOption('gemini-2.5-flash', 'Gemini 2.5 Flash')
+                        .addOption('gemini-2.5-pro', 'Gemini 2.5 Pro')
+                        .addOption('custom', 'Custom...');
+                    dropdown.setValue(isGeminiCustom ? 'custom' : currentGeminiVal)
+                        .onChange(async (value) => {
+                            if (value === 'custom') {
+                                this.plugin.settings.geminiModel = this.plugin.settings.customGeminiModel || 'custom';
+                            } else {
+                                this.plugin.settings.geminiModel = value;
+                            }
+                            await this.plugin.saveSettings();
+                            this.display();
+                        });
+                });
+
+            if (isGeminiCustom || this.plugin.settings.geminiModel === 'custom') {
+                new obsidian.Setting(containerEl)
+                    .setName('Custom Gemini Model Name')
+                    .setDesc('Enter custom model identifier (e.g. gemini-2.5-flash-preview).')
+                    .addText(text => text
+                        .setPlaceholder('Custom Gemini model name...')
+                        .setValue(this.plugin.settings.customGeminiModel || (isGeminiCustom ? currentGeminiVal : ''))
+                        .onChange(async (value) => {
+                            this.plugin.settings.customGeminiModel = value.trim();
                             this.plugin.settings.geminiModel = value.trim();
                             await this.plugin.saveSettings();
-                        }
-                    }));
+                        }));
+            }
 
             new obsidian.Setting(containerEl)
                 .setName('Gemini API Key')
