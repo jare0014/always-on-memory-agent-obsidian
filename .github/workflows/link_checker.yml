@@ -1,0 +1,22 @@
+name: Link Checker
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  schedule:
+    - cron: '0 0 * * 0' # Weekly scan
+
+jobs:
+  link-checker:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Lychee Broken Link Checker
+        uses: lycheeverse/lychee-action@v1.9.0
+        with:
+          args: --config .lychee.toml --verbose ./README.md ./case_study.md ./portfolio_nugget.md
+          fail: true
