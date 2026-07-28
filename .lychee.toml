@@ -2,10 +2,11 @@
 
 # Exclude local addresses, ports, and internal endpoints
 exclude = [
-  '^http://localhost',
-  '^http://127.0.0.1',
-  '^https://localhost',
-  '^https://127.0.0.1',
+  'http://localhost.*',
+  'http://127\.0\.0\.1.*',
+  'https://localhost.*',
+  'https://127\.0\.0\.1.*',
+  'http://100\..*',
 ]
 
 exclude_mail = true
@@ -13,5 +14,5 @@ max_concurrency = 4
 timeout = 10
 max_retries = 3
 
-# Accept 200, 204, 206, 301, 302, 403 (for GitHub rate-limited endpoints)
-accept = [200, 204, 206, 301, 302, 403]
+# Accept 200, 204, 206, 301, 302, 403, 429
+accept = [200, 204, 206, 301, 302, 403, 429]

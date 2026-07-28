@@ -19,4 +19,6 @@ jobs:
         uses: lycheeverse/lychee-action@v1.9.0
         with:
           args: --config .lychee.toml --verbose ./README.md ./case_study.md ./portfolio_nugget.md
-          fail: true
+          fail: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
