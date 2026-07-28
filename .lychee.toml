@@ -1,17 +1,18 @@
 # Lychee link checker configuration
 
-# Exclude local addresses, ports, and internal endpoints
+# Exclude local addresses, ports, Tailscale IPs, and internal endpoints
 exclude = [
   'http://localhost.*',
   'http://127\.0\.0\.1.*',
   'https://localhost.*',
   'https://127\.0\.0\.1.*',
   'http://100\..*',
+  'http://vpn-host.*',
 ]
 
 exclude_mail = true
 max_concurrency = 4
-timeout = 10
+timeout = 15
 max_retries = 3
 
 # Accept 200, 204, 206, 301, 302, 403, 429
