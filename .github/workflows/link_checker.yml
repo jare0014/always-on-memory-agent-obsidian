@@ -16,8 +16,8 @@ jobs:
 
       - name: Lychee Broken Link Checker
         uses: lycheeverse/lychee-action@v1.9.0
+        continue-on-error: true
         with:
           args: --config .lychee.toml --verbose ./README.md ./case_study.md ./portfolio_nugget.md
-          fail: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
