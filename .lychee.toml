@@ -2,14 +2,14 @@
 
 # Exclude local addresses, ports, Tailscale IPs, file schemes, and internal endpoints
 exclude = [
-  'http://localhost.*',
-  'http://127\.0\.0\.1.*',
-  'https://localhost.*',
-  'https://127\.0\.0\.1.*',
-  'http://100\..*',
-  'http://vpn-host.*',
-  'file://.*',
-  'app://.*'
+  '^http://localhost.*',
+  '^http://127\.0\.0\.1.*',
+  '^https://localhost.*',
+  '^https://127\.0\.0\.1.*',
+  '^http://100\..*',
+  '^http://vpn-host.*',
+  '^file://.*',
+  '^app://.*'
 ]
 
 exclude_mail = true
