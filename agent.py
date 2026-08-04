@@ -84,9 +84,10 @@ log = logging.getLogger("memory-agent")
 # ─── Database ──────────────────────────────────────────────────
 
 
-def get_db() -> sqlite3.Connection:
+def init_db():
+    """Initialize database schema, WAL mode, FTS5 virtual table, and indexes once on startup."""
     db = sqlite3.connect(DB_PATH)
-    db.row_factory = sqlite3.Row
+    db.execute("PRAGMA journal_mode=WAL;")
     db.executescript("""
         CREATE TABLE IF NOT EXISTS memories (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -111,8 +112,43 @@ def get_db() -> sqlite3.Connection:
             path TEXT PRIMARY KEY,
             processed_at TEXT NOT NULL
         );
+        CREATE INDEX IF NOT EXISTS idx_memories_topics ON memories(topics);
+        CREATE INDEX IF NOT EXISTS idx_memories_created ON memories(created_at DESC);
     """)
+
+    # Attempt to setup FTS5 table and triggers for full-text search
+    try:
+        db.executescript("""
+            CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts USING fts5(
+                summary,
+                raw_text,
+                content='memories',
+                content_rowid='id'
+            );
+
+            CREATE TRIGGER IF NOT EXISTS memories_ai AFTER INSERT ON memories BEGIN
+                INSERT INTO memories_fts(rowid, summary, raw_text) VALUES (new.id, new.summary, new.raw_text);
+            END;
+            CREATE TRIGGER IF NOT EXISTS memories_ad AFTER DELETE ON memories BEGIN
+                INSERT INTO memories_fts(memories_fts, rowid, summary, raw_text) VALUES('delete', old.id, old.summary, old.raw_text);
+            END;
+            CREATE TRIGGER IF NOT EXISTS memories_au AFTER UPDATE ON memories BEGIN
+                INSERT INTO memories_fts(memories_fts, rowid, summary, raw_text) VALUES('delete', old.id, old.summary, old.raw_text);
+                INSERT INTO memories_fts(rowid, summary, raw_text) VALUES (new.id, new.summary, new.raw_text);
+            END;
+        """)
+    except sqlite3.OperationalError as e:
+        log.warning(f"⚠️ FTS5 indexing setup warning (falling back to LIKE queries): {e}")
+
+    db.close()
+
+
+def get_db() -> sqlite3.Connection:
+    """Return a lightweight connection to the SQLite database without re-running DDL migrations."""
+    db = sqlite3.connect(DB_PATH)
+    db.row_factory = sqlite3.Row
     return db
+
 
 
 # ─── ADK Tools ─────────────────────────────────────────────────
@@ -178,6 +214,54 @@ def read_all_memories() -> dict:
         })
     db.close()
     return {"memories": memories, "count": len(memories)}
+
+
+def search_memories(query: str, limit: int = 20) -> dict:
+    """Search stored memories by keyword query using full-text search (FTS5) or LIKE filters.
+
+    Args:
+        query: The search keywords or phrases to look for.
+        limit: Maximum number of relevant memories to return.
+
+    Returns:
+        dict with list of matching memories and count.
+    """
+    db = get_db()
+    memories = []
+    query_clean = query.strip()
+    if not query_clean:
+        db.close()
+        return read_all_memories()
+
+    try:
+        # FTS5 search
+        sql = """
+            SELECT m.* FROM memories m
+            JOIN memories_fts fts ON m.id = fts.rowid
+            WHERE memories_fts MATCH ?
+            ORDER BY m.importance DESC, m.created_at DESC LIMIT ?
+        """
+        rows = db.execute(sql, (query_clean, limit)).fetchall()
+    except sqlite3.OperationalError:
+        # Fallback to LIKE filter on summary, topics, and raw_text
+        like_pattern = f"%{query_clean}%"
+        sql = """
+            SELECT * FROM memories
+            WHERE summary LIKE ? OR topics LIKE ? OR raw_text LIKE ? OR source LIKE ?
+            ORDER BY importance DESC, created_at DESC LIMIT ?
+        """
+        rows = db.execute(sql, (like_pattern, like_pattern, like_pattern, like_pattern, limit)).fetchall()
+
+    for r in rows:
+        memories.append({
+            "id": r["id"], "source": r["source"], "summary": r["summary"],
+            "entities": json.loads(r["entities"]), "topics": json.loads(r["topics"]),
+            "importance": r["importance"], "connections": json.loads(r["connections"]),
+            "created_at": r["created_at"], "consolidated": bool(r["consolidated"]),
+        })
+    db.close()
+    return {"query": query, "memories": memories, "count": len(memories)}
+
 
 
 def read_unconsolidated_memories() -> dict:
@@ -383,14 +467,15 @@ def build_agents():
         description="Answers questions using stored memories.",
         instruction=(
             "You are a Memory Query Agent. When asked a question:\n"
-            "1. Call read_all_memories to access the memory store\n"
-            "2. Call read_consolidation_history for higher-level insights\n"
-            "3. Synthesize a clean, human-readable answer in Markdown based ONLY on stored memories\n"
-            "4. Reference memory IDs: [Memory #1101], [Memory #1102], etc.\n"
-            "5. If no relevant memories exist, say so honestly\n\n"
+            "1. Call search_memories with relevant keywords to locate target memories\n"
+            "2. If search_memories returns empty or for broad queries, call read_all_memories\n"
+            "3. Call read_consolidation_history for higher-level insights\n"
+            "4. Synthesize a clean, human-readable answer in Markdown based ONLY on stored memories\n"
+            "5. Reference memory IDs: [Memory #1101], [Memory #1102], etc.\n"
+            "6. If no relevant memories exist, say so honestly\n\n"
             "CRITICAL FORMATTING RULE: Synthesize an articulated Markdown answer with bullet points and bold titles. NEVER output raw JSON objects, stringified JSON dicts, or unformatted data structures."
         ),
-        tools=[read_all_memories, read_consolidation_history],
+        tools=[search_memories, read_all_memories, read_consolidation_history],
     )
 
     orchestrator = Agent(
@@ -459,13 +544,23 @@ class MemoryAgent:
     async def _execute(self, session, content: types.Content, runner: Runner) -> str:
         """Run the agent with the given content and return the text response."""
         response = ""
-        async for event in runner.run_async(
-            user_id="agent", session_id=session.id, new_message=content,
-        ):
-            if event.content and event.content.parts:
-                for part in event.content.parts:
-                    if hasattr(part, "text") and part.text:
-                        response += part.text
+        try:
+            async for event in runner.run_async(
+                user_id="agent", session_id=session.id, new_message=content,
+            ):
+                if event.content and event.content.parts:
+                    for part in event.content.parts:
+                        if hasattr(part, "text") and part.text:
+                            response += part.text
+        finally:
+            # Cleanup session to prevent unbounded memory growth in 24/7 operation
+            try:
+                if hasattr(self.session_service, "delete_session"):
+                    await self.session_service.delete_session(app_name=runner.app_name, user_id="agent", session_id=session.id)
+                elif hasattr(self.session_service, "_sessions") and isinstance(self.session_service._sessions, dict):
+                    self.session_service._sessions.pop(session.id, None)
+            except Exception:
+                pass
         return response
 
     async def ingest(self, text: str, source: str = "") -> str:
@@ -518,44 +613,48 @@ class MemoryAgent:
 async def watch_folder(agent: MemoryAgent, folder: Path, poll_interval: int = 5):
     """Watch a folder for new files and ingest them (text, images, audio, video, PDFs)."""
     folder.mkdir(parents=True, exist_ok=True)
-    db = get_db()
     log.info(f"👁️  Watching: {folder}/  (supports: text, images, audio, video, PDFs)")
 
     while True:
         try:
-            for f in sorted(folder.iterdir()):
-                if f.name.startswith("."):
-                    continue  # skip hidden files
-                suffix = f.suffix.lower()
-                if suffix not in ALL_SUPPORTED:
-                    continue
-                row = db.execute("SELECT 1 FROM processed_files WHERE path = ?", (str(f),)).fetchone()
-                if row:
-                    continue
+            db = get_db()
+            try:
+                for f in sorted(folder.iterdir()):
+                    if f.name.startswith("."):
+                        continue  # skip hidden files
+                    suffix = f.suffix.lower()
+                    if suffix not in ALL_SUPPORTED:
+                        continue
+                    row = db.execute("SELECT 1 FROM processed_files WHERE path = ?", (str(f),)).fetchone()
+                    if row:
+                        continue
 
-                try:
-                    if suffix in TEXT_EXTENSIONS:
-                        # Text-based files — read as string
-                        log.info(f"📄 New text file: {f.name}")
-                        text = f.read_text(encoding="utf-8", errors="replace")[:10000]
-                        if text.strip():
-                            await agent.ingest(text, source=f.name)
-                    else:
-                        # Media files — send as multimodal bytes
-                        log.info(f"🖼️  New media file: {f.name}")
-                        await agent.ingest_file(f)
-                except Exception as file_err:
-                    log.error(f"Error ingesting {f.name}: {file_err}")
+                    try:
+                        if suffix in TEXT_EXTENSIONS:
+                            # Text-based files — read as string
+                            log.info(f"📄 New text file: {f.name}")
+                            text = f.read_text(encoding="utf-8", errors="replace")[:10000]
+                            if text.strip():
+                                await agent.ingest(text, source=f.name)
+                        else:
+                            # Media files — send as multimodal bytes
+                            log.info(f"🖼️  New media file: {f.name}")
+                            await agent.ingest_file(f)
+                    except Exception as file_err:
+                        log.error(f"Error ingesting {f.name}: {file_err}")
 
-                db.execute(
-                    "INSERT INTO processed_files (path, processed_at) VALUES (?, ?)",
-                    (str(f), datetime.now(timezone.utc).isoformat()),
-                )
-                db.commit()
+                    db.execute(
+                        "INSERT INTO processed_files (path, processed_at) VALUES (?, ?)",
+                        (str(f), datetime.now(timezone.utc).isoformat()),
+                    )
+                    db.commit()
+            finally:
+                db.close()
         except Exception as e:
             log.error(f"Watch error: {e}")
 
         await asyncio.sleep(poll_interval)
+
 
 
 # ─── Consolidation Timer ──────────────────────────────────────
@@ -645,10 +744,14 @@ def build_http(agent: MemoryAgent, watch_path: str = "./inbox"):
         result = delete_memory(int(memory_id))
         return web.json_response(result)
 
+    async def handle_ping(request: web.Request):
+        return web.json_response({"ok": True, "status": "healthy", "service": "always-on-memory-agent"})
+
     async def handle_clear(request: web.Request):
         result = clear_all_memories(inbox_path=watch_path)
         return web.json_response(result)
 
+    app.router.add_get("/ping", handle_ping)
     app.router.add_get("/query", handle_query)
     app.router.add_post("/ingest", handle_ingest)
     app.router.add_post("/consolidate", handle_consolidate)
@@ -664,6 +767,7 @@ def build_http(agent: MemoryAgent, watch_path: str = "./inbox"):
 
 
 async def main_async(args):
+    init_db()
     agent = MemoryAgent()
 
     log.info("🧠 Agent Memory Layer starting")
@@ -673,6 +777,7 @@ async def main_async(args):
     log.info(f"   Consolidate: every {args.consolidate_every}m")
     log.info(f"   API: http://localhost:{args.port}")
     log.info("")
+
 
     # Start background tasks
     tasks = [
