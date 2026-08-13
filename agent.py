@@ -363,6 +363,35 @@ def get_memory_stats() -> dict:
     }
 
 
+def read_all_memories(limit: int = 50) -> dict:
+    """Reads stored memories from SQLite database for UI display."""
+    db = get_db()
+    rows = db.execute("SELECT id, raw_text, source, summary, topics, created_at FROM memories ORDER BY created_at DESC LIMIT ?", (limit,)).fetchall()
+    memories = []
+    for r in rows:
+        topics_val = r["topics"]
+        if isinstance(topics_val, str):
+            try:
+                topics_list = json.loads(topics_val)
+            except Exception:
+                topics_list = [t.strip() for t in topics_val.split(",") if t.strip()]
+        elif isinstance(topics_val, list):
+            topics_list = topics_val
+        else:
+            topics_list = []
+        
+        memories.append({
+            "id": r["id"],
+            "raw_text": r["raw_text"],
+            "source": r["source"],
+            "summary": r["summary"],
+            "topics": topics_list,
+            "created_at": r["created_at"]
+        })
+    db.close()
+    return {"memories": memories, "count": len(memories)}
+
+
 def delete_memory(memory_id: int) -> dict:
     """Delete a memory by ID.
 
@@ -683,7 +712,18 @@ async def consolidation_loop(agent: MemoryAgent, interval_minutes: int = 30):
 
 
 def build_http(agent: MemoryAgent, watch_path: str = "./inbox"):
-    app = web.Application()
+    @web.middleware
+    async def cors_middleware(request, handler):
+        if request.method == "OPTIONS":
+            response = web.Response(status=204)
+        else:
+            response = await handler(request)
+        response.headers["Access-Control-Allow-Origin"] = "*"
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS, DELETE"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+        return response
+
+    app = web.Application(middlewares=[cors_middleware])
 
     async def handle_query(request: web.Request):
         q = request.query.get("q", "").strip()
