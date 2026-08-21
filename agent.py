@@ -26,6 +26,7 @@ import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
+import numpy as np
 
 from aiohttp import web
 from google.adk.agents import Agent
@@ -35,14 +36,46 @@ from google.genai import types
 
 # ─── Config ────────────────────────────────────────────────────
 
+AGENT_DIR = Path(__file__).resolve().parent
 try:
     from dotenv import load_dotenv
-    load_dotenv()
+    load_dotenv(AGENT_DIR / ".env")
 except ImportError:
     pass
 
 MODEL = os.getenv("MODEL", "gemini-3.5-flash")
-DB_PATH = os.getenv("MEMORY_DB", "memory.db")
+DB_PATH = os.getenv("MEMORY_DB", str(AGENT_DIR / "memory.db"))
+if not os.path.isabs(DB_PATH):
+    DB_PATH = str(AGENT_DIR / DB_PATH)
+
+_fastembed_model = None
+
+def get_fastembed_model():
+    global _fastembed_model
+    if _fastembed_model is None:
+        try:
+            os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
+            from fastembed import TextEmbedding
+            _fastembed_model = TextEmbedding(model_name="BAAI/bge-small-en-v1.5")
+        except Exception as e:
+            log.warning(f"⚠️ fastembed initialization warning: {e}")
+            _fastembed_model = False
+    return _fastembed_model
+
+def embed_text_memory(text: str) -> np.ndarray | None:
+    """Embed text using local fastembed (384-dim) or return None on failure."""
+    model = get_fastembed_model()
+    if model:
+        try:
+            embeddings = list(model.embed([text]))
+            vec = np.array(embeddings[0], dtype=np.float32)
+            norm = np.linalg.norm(vec)
+            if norm > 0:
+                vec = vec / norm
+            return vec
+        except Exception as e:
+            log.warning(f"Embedding error: {e}")
+    return None
 
 # Supported file types for multimodal ingestion
 TEXT_EXTENSIONS = {".txt", ".md", ".json", ".csv", ".log", ".xml", ".yaml", ".yml"}
@@ -101,6 +134,13 @@ def init_db():
             created_at TEXT NOT NULL,
             consolidated INTEGER NOT NULL DEFAULT 0
         );
+        CREATE TABLE IF NOT EXISTS memory_embeddings (
+            memory_id INTEGER PRIMARY KEY,
+            vector BLOB NOT NULL,
+            model TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY(memory_id) REFERENCES memories(id) ON DELETE CASCADE
+        );
         CREATE TABLE IF NOT EXISTS consolidations (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             source_ids TEXT NOT NULL,
@@ -114,6 +154,7 @@ def init_db():
         );
         CREATE INDEX IF NOT EXISTS idx_memories_topics ON memories(topics);
         CREATE INDEX IF NOT EXISTS idx_memories_created ON memories(created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_embeddings_model ON memory_embeddings(model);
     """)
 
     # Attempt to setup FTS5 table and triggers for full-text search
@@ -162,7 +203,7 @@ def store_memory(
     importance: float,
     source: str = "",
 ) -> dict:
-    """Store a processed memory in the database.
+    """Store a processed memory in the database and generate its vector embedding.
 
     Args:
         raw_text: The original input text.
@@ -189,10 +230,22 @@ def store_memory(
            VALUES (?, ?, ?, ?, ?, ?, ?)""",
         (source, raw_text, summary, json.dumps(entities), json.dumps(topics), importance, now),
     )
-    db.commit()
     mid = cursor.lastrowid
+
+    # Compute and store vector embedding
+    vec = embed_text_memory(f"{summary} {raw_text[:500]}")
+    if vec is not None:
+        try:
+            db.execute(
+                "INSERT OR REPLACE INTO memory_embeddings (memory_id, vector, model, updated_at) VALUES (?, ?, ?, ?)",
+                (mid, vec.tobytes(), "bge-small-en-v1.5", now),
+            )
+        except Exception as e:
+            log.warning(f"Embedding storage failed for #{mid}: {e}")
+
+    db.commit()
     db.close()
-    log.info(f"📥 Stored memory #{mid}: {summary[:60]}...")
+    log.info(f"📥 Stored memory #{mid} (with vector): {summary[:60]}...")
     return {"memory_id": mid, "status": "stored", "summary": summary}
 
 
@@ -217,48 +270,105 @@ def read_all_memories() -> dict:
 
 
 def search_memories(query: str, limit: int = 20) -> dict:
-    """Search stored memories by keyword query using full-text search (FTS5) or LIKE filters.
+    """Search stored memories using Hybrid Semantic Vector + FTS5 Full-Text Search.
 
     Args:
         query: The search keywords or phrases to look for.
         limit: Maximum number of relevant memories to return.
 
     Returns:
-        dict with list of matching memories and count.
+        dict with list of matching memories, similarity scores, and count.
     """
     db = get_db()
-    memories = []
     query_clean = query.strip()
     if not query_clean:
         db.close()
         return read_all_memories()
 
+    # 1. Vector Search
+    vector_ranks = {}
+    query_vec = embed_text_memory(query_clean)
+    if query_vec is not None:
+        try:
+            rows = db.execute("SELECT memory_id, vector FROM memory_embeddings").fetchall()
+            if rows:
+                m_ids = [r["memory_id"] for r in rows]
+                vec_list = [np.frombuffer(r["vector"], dtype=np.float32) for r in rows]
+                matrix = np.array(vec_list, dtype=np.float32)
+                scores = np.dot(matrix, query_vec)
+                ranked_pairs = sorted(zip(m_ids, scores), key=lambda x: x[1], reverse=True)
+                for rank, (m_id, sim) in enumerate(ranked_pairs[:100], 1):
+                    vector_ranks[m_id] = (rank, float(sim))
+        except Exception as e:
+            log.warning(f"Vector search warning: {e}")
+
+    # 2. FTS5 / Keyword Search
+    fts_ranks = {}
     try:
-        # FTS5 search
         sql = """
-            SELECT m.* FROM memories m
+            SELECT m.id, bm25(memories_fts) as rank_score FROM memories m
             JOIN memories_fts fts ON m.id = fts.rowid
             WHERE memories_fts MATCH ?
-            ORDER BY m.importance DESC, m.created_at DESC LIMIT ?
+            ORDER BY rank_score ASC LIMIT 50
         """
-        rows = db.execute(sql, (query_clean, limit)).fetchall()
+        rows = db.execute(sql, (query_clean,)).fetchall()
+        for rank, r in enumerate(rows, 1):
+            fts_ranks[r["id"]] = rank
     except sqlite3.OperationalError:
-        # Fallback to LIKE filter on summary, topics, and raw_text
         like_pattern = f"%{query_clean}%"
         sql = """
-            SELECT * FROM memories
+            SELECT id FROM memories
             WHERE summary LIKE ? OR topics LIKE ? OR raw_text LIKE ? OR source LIKE ?
-            ORDER BY importance DESC, created_at DESC LIMIT ?
+            ORDER BY importance DESC, created_at DESC LIMIT 50
         """
-        rows = db.execute(sql, (like_pattern, like_pattern, like_pattern, like_pattern, limit)).fetchall()
+        rows = db.execute(sql, (like_pattern, like_pattern, like_pattern, like_pattern)).fetchall()
+        for rank, r in enumerate(rows, 1):
+            fts_ranks[r["id"]] = rank
 
-    for r in rows:
-        memories.append({
-            "id": r["id"], "source": r["source"], "summary": r["summary"],
-            "entities": json.loads(r["entities"]), "topics": json.loads(r["topics"]),
-            "importance": r["importance"], "connections": json.loads(r["connections"]),
-            "created_at": r["created_at"], "consolidated": bool(r["consolidated"]),
-        })
+    # 3. Reciprocal Rank Fusion (RRF)
+    all_candidate_ids = set(vector_ranks.keys()) | set(fts_ranks.keys())
+    if not all_candidate_ids:
+        db.close()
+        return read_all_memories()
+
+    rrf_scores = []
+    for m_id in all_candidate_ids:
+        rrf = 0.0
+        sim_val = 0.0
+        if m_id in vector_ranks:
+            v_rank, sim_val = vector_ranks[m_id]
+            rrf += 1.0 / (60.0 + v_rank)
+        if m_id in fts_ranks:
+            f_rank = fts_ranks[m_id]
+            rrf += 1.0 / (60.0 + f_rank)
+        rrf_scores.append((m_id, rrf, sim_val))
+
+    rrf_scores.sort(key=lambda x: x[1], reverse=True)
+    top_candidates = rrf_scores[:limit]
+    top_ids = [c[0] for c in top_candidates]
+
+    placeholders = ",".join("?" * len(top_ids))
+    rows = db.execute(f"SELECT * FROM memories WHERE id IN ({placeholders})", top_ids).fetchall()
+    row_map = {r["id"]: r for r in rows}
+
+    memories = []
+    for m_id, rrf, sim in top_candidates:
+        if m_id in row_map:
+            r = row_map[m_id]
+            memories.append({
+                "id": r["id"],
+                "source": r["source"],
+                "summary": r["summary"],
+                "entities": json.loads(r["entities"]),
+                "topics": json.loads(r["topics"]),
+                "importance": r["importance"],
+                "connections": json.loads(r["connections"]),
+                "created_at": r["created_at"],
+                "consolidated": bool(r["consolidated"]),
+                "similarity_score": round(sim, 4) if sim > 0 else None,
+                "rrf_score": round(rrf, 5)
+            })
+
     db.close()
     return {"query": query, "memories": memories, "count": len(memories)}
 
@@ -784,6 +894,17 @@ def build_http(agent: MemoryAgent, watch_path: str = "./inbox"):
         result = delete_memory(int(memory_id))
         return web.json_response(result)
 
+    async def handle_semantic_query(request: web.Request):
+        q = request.query.get("q", "").strip()
+        top_k = int(request.query.get("top_k", 8))
+        if not q:
+            return web.json_response({"error": "missing ?q= parameter"}, status=400)
+        try:
+            results = search_memories(q, limit=top_k)
+            return web.json_response(results)
+        except Exception as e:
+            return web.json_response({"error": str(e)}, status=500)
+
     async def handle_ping(request: web.Request):
         return web.json_response({"ok": True, "status": "healthy", "service": "always-on-memory-agent"})
 
@@ -793,6 +914,7 @@ def build_http(agent: MemoryAgent, watch_path: str = "./inbox"):
 
     app.router.add_get("/ping", handle_ping)
     app.router.add_get("/query", handle_query)
+    app.router.add_get("/semantic-query", handle_semantic_query)
     app.router.add_post("/ingest", handle_ingest)
     app.router.add_post("/consolidate", handle_consolidate)
     app.router.add_get("/status", handle_status)
