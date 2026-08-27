@@ -249,6 +249,21 @@ def store_memory(
     return {"memory_id": mid, "status": "stored", "summary": summary}
 
 
+def safe_json_loads(val, default=None):
+    if default is None:
+        default = []
+    if val is None or val == "":
+        return default
+    if isinstance(val, (list, dict)):
+        return val
+    try:
+        return json.loads(val)
+    except Exception:
+        if isinstance(val, str) and "," in val:
+            return [x.strip() for x in val.split(",") if x.strip()]
+        return default
+
+
 def read_all_memories() -> dict:
     """Read all stored memories from the database, most recent first.
 
@@ -261,8 +276,8 @@ def read_all_memories() -> dict:
     for r in rows:
         memories.append({
             "id": r["id"], "source": r["source"], "summary": r["summary"],
-            "entities": json.loads(r["entities"]), "topics": json.loads(r["topics"]),
-            "importance": r["importance"], "connections": json.loads(r["connections"]),
+            "entities": safe_json_loads(r["entities"]), "topics": safe_json_loads(r["topics"]),
+            "importance": r["importance"], "connections": safe_json_loads(r["connections"]),
             "created_at": r["created_at"], "consolidated": bool(r["consolidated"]),
         })
     db.close()
@@ -359,10 +374,10 @@ def search_memories(query: str, limit: int = 20) -> dict:
                 "id": r["id"],
                 "source": r["source"],
                 "summary": r["summary"],
-                "entities": json.loads(r["entities"]),
-                "topics": json.loads(r["topics"]),
+                "entities": safe_json_loads(r["entities"]),
+                "topics": safe_json_loads(r["topics"]),
                 "importance": r["importance"],
-                "connections": json.loads(r["connections"]),
+                "connections": safe_json_loads(r["connections"]),
                 "created_at": r["created_at"],
                 "consolidated": bool(r["consolidated"]),
                 "similarity_score": round(sim, 4) if sim > 0 else None,
@@ -388,7 +403,7 @@ def read_unconsolidated_memories() -> dict:
     for r in rows:
         memories.append({
             "id": r["id"], "summary": r["summary"],
-            "entities": json.loads(r["entities"]), "topics": json.loads(r["topics"]),
+            "entities": safe_json_loads(r["entities"]), "topics": safe_json_loads(r["topics"]),
             "importance": r["importance"], "created_at": r["created_at"],
         })
     db.close()
@@ -431,7 +446,7 @@ def store_consolidation(
             for mid in [from_id, to_id]:
                 row = db.execute("SELECT connections FROM memories WHERE id = ?", (mid,)).fetchone()
                 if row:
-                    existing = json.loads(row["connections"])
+                    existing = safe_json_loads(row["connections"])
                     existing.append({"linked_to": to_id if mid == from_id else from_id, "relationship": rel})
                     db.execute("UPDATE memories SET connections = ? WHERE id = ?", (json.dumps(existing), mid))
     placeholders = ",".join("?" * len(source_ids))

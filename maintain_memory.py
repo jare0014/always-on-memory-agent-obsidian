@@ -10,9 +10,31 @@ from dotenv import load_dotenv
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
 
-load_dotenv()
+SCRIPT_DIR = Path(__file__).resolve().parent
+try:
+    from dotenv import load_dotenv
+    load_dotenv(SCRIPT_DIR / ".env")
+except ImportError:
+    pass
 
-DB_PATH = os.getenv("MEMORY_DB", r"c:\Users\jare0\Documents\Obsidian\04_Projects\always-on-memory-agent\memory.db")
+def _resolve_memory_db_path():
+    env_db = os.getenv("MEMORY_DB")
+    if env_db:
+        if os.path.isabs(env_db) and os.path.exists(env_db):
+            return env_db
+        cand = (SCRIPT_DIR / env_db).resolve()
+        if cand.exists():
+            return str(cand)
+    for root_cand in [SCRIPT_DIR.parent.parent, SCRIPT_DIR.parent.parent.parent, SCRIPT_DIR.parent]:
+        cand1 = root_cand / "99_System" / "Memory" / "memory.db"
+        if cand1.exists():
+            return str(cand1)
+        cand2 = root_cand / "99_System" / "memory.db"
+        if cand2.exists():
+            return str(cand2)
+    return str(SCRIPT_DIR / "memory.db")
+
+DB_PATH = _resolve_memory_db_path()
 AGENT_URL = os.getenv("AGENT_URL", "http://localhost:8888")
 
 def get_db():
