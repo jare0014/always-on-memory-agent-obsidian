@@ -390,24 +390,119 @@ def search_memories(query: str, limit: int = 20) -> dict:
 
 
 def read_unconsolidated_memories() -> dict:
-    """Read memories that haven't been consolidated yet.
+    """Read memories that haven't been consolidated yet using Hybrid Thematic Vector Clustering
+    with Chronological fallback.
 
     Returns:
-        dict with list of unconsolidated memories and count.
+        dict with list of unconsolidated memories, cluster type, and count.
     """
     db = get_db()
+    # Pull candidate pool of unconsolidated memories (up to 50)
     rows = db.execute(
-        "SELECT * FROM memories WHERE consolidated = 0 ORDER BY created_at DESC LIMIT 10"
+        "SELECT id, summary, raw_text, entities, topics, importance, created_at "
+        "FROM memories WHERE consolidated = 0 ORDER BY created_at DESC LIMIT 50"
     ).fetchall()
-    memories = []
-    for r in rows:
-        memories.append({
+
+    if not rows:
+        db.close()
+        return {"memories": [], "count": 0, "cluster_type": "none"}
+
+    if len(rows) < 3:
+        # If very few memories, return them directly
+        memories = [{
             "id": r["id"], "summary": r["summary"],
             "entities": safe_json_loads(r["entities"]), "topics": safe_json_loads(r["topics"]),
             "importance": r["importance"], "created_at": r["created_at"],
-        })
+        } for r in rows]
+        db.close()
+        return {"memories": memories, "count": len(memories), "cluster_type": "chronological"}
+
+    # Attempt Thematic Vector Clustering
+    m_ids = [r["id"] for r in rows]
+    row_map = {r["id"]: r for r in rows}
+
+    placeholders = ",".join("?" * len(m_ids))
+    emb_rows = db.execute(
+        f"SELECT memory_id, vector FROM memory_embeddings WHERE memory_id IN ({placeholders})",
+        m_ids,
+    ).fetchall()
+    emb_dict = {r["memory_id"]: np.frombuffer(r["vector"], dtype=np.float32) for r in emb_rows}
+
+    # If any unconsolidated memory lacks an embedding, compute it now
+    missing_ids = [mid for mid in m_ids if mid not in emb_dict]
+    if missing_ids:
+        now = datetime.now(timezone.utc).isoformat()
+        for mid in missing_ids:
+            r = row_map[mid]
+            vec = embed_text_memory(f"{r['summary']} {r['raw_text'][:500]}")
+            if vec is not None:
+                emb_dict[mid] = vec
+                try:
+                    db.execute(
+                        "INSERT OR REPLACE INTO memory_embeddings (memory_id, vector, model, updated_at) VALUES (?, ?, ?, ?)",
+                        (mid, vec.tobytes(), "bge-small-en-v1.5", now),
+                    )
+                except Exception:
+                    pass
+        db.commit()
+
+    # Find the most cohesive thematic cluster
+    best_cluster = []
+    best_cluster_score = 0.0
+
+    # Test each memory with an embedding as a potential cluster centroid
+    available_ids = [mid for mid in m_ids if mid in emb_dict]
+    if len(available_ids) >= 3:
+        for seed_id in available_ids[:15]:  # check top 15 most recent candidates
+            seed_vec = emb_dict[seed_id]
+            scores = []
+            for other_id in available_ids:
+                if other_id == seed_id:
+                    continue
+                other_vec = emb_dict[other_id]
+                sim = float(np.dot(seed_vec, other_vec))
+                if sim >= 0.60:  # High semantic similarity threshold
+                    scores.append((other_id, sim))
+
+            # If we found at least 2 strong neighbors (forming cluster of >= 3)
+            if len(scores) >= 2:
+                scores.sort(key=lambda x: x[1], reverse=True)
+                cluster_members = [seed_id] + [s[0] for s in scores[:7]]
+                avg_sim = sum(s[1] for s in scores[:len(cluster_members) - 1]) / (len(cluster_members) - 1)
+                cluster_score = avg_sim * (1.0 + 0.1 * len(cluster_members))
+                if cluster_score > best_cluster_score:
+                    best_cluster = cluster_members
+                    best_cluster_score = cluster_score
+
     db.close()
-    return {"memories": memories, "count": len(memories)}
+
+    if best_cluster and len(best_cluster) >= 3:
+        log.info(f"🧩 Thematic cluster identified ({len(best_cluster)} memories, score {best_cluster_score:.3f}): IDs {best_cluster}")
+        cluster_rows = [row_map[mid] for mid in best_cluster if mid in row_map]
+        memories = [{
+            "id": r["id"], "summary": r["summary"],
+            "entities": safe_json_loads(r["entities"]), "topics": safe_json_loads(r["topics"]),
+            "importance": r["importance"], "created_at": r["created_at"],
+        } for r in cluster_rows]
+        return {
+            "memories": memories,
+            "count": len(memories),
+            "cluster_type": "thematic",
+            "cluster_score": round(best_cluster_score, 4)
+        }
+
+    # Fallback to chronological batching (top 10)
+    chrono_rows = rows[:10]
+    memories = [{
+        "id": r["id"], "summary": r["summary"],
+        "entities": safe_json_loads(r["entities"]), "topics": safe_json_loads(r["topics"]),
+        "importance": r["importance"], "created_at": r["created_at"],
+    } for r in chrono_rows]
+    return {
+        "memories": memories,
+        "count": len(memories),
+        "cluster_type": "chronological"
+    }
 
 
 def store_consolidation(
@@ -603,7 +698,7 @@ def build_agents():
         description="Merges related memories and finds patterns. Call this periodically.",
         instruction=(
             "You are a Memory Consolidation Agent. You:\n"
-            "1. Call read_unconsolidated_memories to see what needs processing\n"
+            "1. Call read_unconsolidated_memories to see what needs processing (which automatically returns thematically clustered or chronological memories)\n"
             "2. If fewer than 2 memories, say nothing to consolidate\n"
             "3. Find connections and patterns across the memories\n"
             "4. Create a synthesized summary and one key insight\n"
