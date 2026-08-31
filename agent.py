@@ -28,6 +28,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 import numpy as np
 
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8')
+if hasattr(sys.stderr, 'reconfigure'):
+    sys.stderr.reconfigure(encoding='utf-8')
+
 from aiohttp import web
 from google.adk.agents import Agent
 from google.adk.runners import Runner
