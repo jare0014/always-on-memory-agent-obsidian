@@ -48,7 +48,33 @@ try:
 except ImportError:
     pass
 
-MODEL = os.getenv("MODEL", "gemini-3.5-flash")
+# ─── Model & Compute Routing Configuration ─────────────────────
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
+OLLAMA_API_BASE = os.getenv("OLLAMA_API_BASE", "http://127.0.0.1:11434").strip()
+if OLLAMA_API_BASE:
+    os.environ["OLLAMA_API_BASE"] = OLLAMA_API_BASE
+
+LLM_PROVIDER = os.getenv("LLM_PROVIDER", "hybrid").lower()
+LOCAL_DEFAULT = "litellm:ollama/qwen2.5:7b"
+CLOUD_DEFAULT = "gemini-2.5-flash-lite"
+
+LOCAL_MODEL = os.getenv("LOCAL_MODEL") or os.getenv("OLLAMA_MODEL") or LOCAL_DEFAULT
+CLOUD_MODEL = os.getenv("CLOUD_MODEL") or os.getenv("GEMINI_MODEL") or CLOUD_DEFAULT
+
+if LLM_PROVIDER == "hybrid":
+    INGEST_MODEL = os.getenv("INGEST_MODEL", LOCAL_MODEL)
+    CONSOLIDATE_MODEL = os.getenv("CONSOLIDATE_MODEL", LOCAL_MODEL)
+    QUERY_MODEL = os.getenv("QUERY_MODEL", CLOUD_MODEL if GEMINI_API_KEY else LOCAL_MODEL)
+elif LLM_PROVIDER == "gemini":
+    INGEST_MODEL = os.getenv("INGEST_MODEL", CLOUD_MODEL)
+    CONSOLIDATE_MODEL = os.getenv("CONSOLIDATE_MODEL", CLOUD_MODEL)
+    QUERY_MODEL = os.getenv("QUERY_MODEL", CLOUD_MODEL)
+else:  # ollama
+    INGEST_MODEL = os.getenv("INGEST_MODEL", LOCAL_MODEL)
+    CONSOLIDATE_MODEL = os.getenv("CONSOLIDATE_MODEL", LOCAL_MODEL)
+    QUERY_MODEL = os.getenv("QUERY_MODEL", LOCAL_MODEL)
+
+MODEL = QUERY_MODEL
 DB_PATH = os.getenv("MEMORY_DB", str(AGENT_DIR / "memory.db"))
 if not os.path.isabs(DB_PATH):
     DB_PATH = str(AGENT_DIR / DB_PATH)
@@ -676,7 +702,7 @@ def clear_all_memories(inbox_path: str | None = None) -> dict:
 def build_agents():
     ingest_agent = Agent(
         name="ingest_agent",
-        model=MODEL,
+        model=INGEST_MODEL,
         description="Processes raw text or media into structured memory. Call this when new information arrives.",
         instruction=(
             "You are a Memory Ingest Agent. You handle ALL types of input — text, images,\n"
@@ -699,7 +725,7 @@ def build_agents():
 
     consolidate_agent = Agent(
         name="consolidate_agent",
-        model=MODEL,
+        model=CONSOLIDATE_MODEL,
         description="Merges related memories and finds patterns. Call this periodically.",
         instruction=(
             "You are a Memory Consolidation Agent. You:\n"
@@ -717,7 +743,7 @@ def build_agents():
 
     query_agent = Agent(
         name="query_agent",
-        model=MODEL,
+        model=QUERY_MODEL,
         description="Answers questions using stored memories.",
         instruction=(
             "You are a Memory Query Agent. When asked a question:\n"
@@ -734,7 +760,7 @@ def build_agents():
 
     orchestrator = Agent(
         name="memory_orchestrator",
-        model=MODEL,
+        model=QUERY_MODEL,
         description="Routes memory operations to specialist agents.",
         instruction=(
             "You are the Memory Orchestrator for an always-on memory system.\n"
@@ -854,7 +880,43 @@ class MemoryAgent:
         return await self.run("Consolidate unconsolidated memories. Find connections and patterns.", self.consolidate_runner)
 
     async def query(self, question: str) -> str:
-        return await self.run(f"Based on my memories, answer: {question}", self.query_runner)
+        msg = f"Based on my memories, answer: {question}"
+        try:
+            res = await self.run(msg, self.query_runner)
+            if res and res.strip() and res.strip() != "{}":
+                return res
+        except Exception as e:
+            log.warning(f"⚠️ Primary query runner ({QUERY_MODEL}) failed: {e}")
+            if QUERY_MODEL != LOCAL_MODEL:
+                log.info(f"🔄 Falling back to local model: {LOCAL_MODEL}")
+                try:
+                    fallback_agent = Agent(
+                        name="fallback_query_agent",
+                        model=LOCAL_MODEL,
+                        instruction=self.query_runner.agent.instruction,
+                        tools=self.query_runner.agent.tools,
+                    )
+                    fallback_runner = Runner(
+                        agent=fallback_agent,
+                        app_name="fallback_query_layer",
+                        session_service=self.session_service,
+                    )
+                    fallback_res = await self.run(msg, fallback_runner)
+                    if fallback_res and fallback_res.strip() and fallback_res.strip() != "{}":
+                        return fallback_res
+                except Exception as fallback_err:
+                    log.error(f"Fallback query runner failed: {fallback_err}")
+            raise e
+
+        # If LLM returned empty or "{}" without text
+        search_res = search_memories(question, limit=5)
+        mems = search_res.get("memories", [])
+        if mems:
+            lines = [f"### 🧠 Memory Search Results: *{question}*\n"]
+            for m in mems:
+                lines.append(f"- **[Memory #{m['id']}]** (*{m.get('source', 'Vault')}*): {m.get('summary') or m.get('raw_text', '')[:200]}")
+            return "\n".join(lines)
+        return "I checked your memories, but found no relevant records for this question."
 
     async def status(self) -> str:
         stats = get_memory_stats()
@@ -964,6 +1026,17 @@ def build_http(agent: MemoryAgent, watch_path: str = "./inbox"):
                 return web.json_response({
                     "error": "Gemini API key invalid or unauthenticated (401). Please enter your valid Gemini API key in Always-On Memory Agent settings in Obsidian."
                 }, status=401)
+            # Graceful search fallback instead of unhandled 500
+            try:
+                search_res = search_memories(q, limit=5)
+                mems = search_res.get("memories", [])
+                if mems:
+                    fallback_text = f"**Search Excerpts for:** *{q}*\n\n"
+                    for m in mems:
+                        fallback_text += f"- **[Memory #{m['id']}]** (*{m.get('source', 'Vault')}*): {m.get('summary') or m.get('raw_text', '')[:200]}\n"
+                    return web.json_response({"question": q, "answer": fallback_text, "fallback": True})
+            except Exception:
+                pass
             return web.json_response({"error": err_msg}, status=500)
 
     async def handle_ingest(request: web.Request):

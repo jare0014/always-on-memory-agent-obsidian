@@ -5,10 +5,10 @@ const fs = require('fs');
 
 const DEFAULT_SETTINGS = {
     autoStartOnLaunch: false,
-    llmProvider: 'gemini', // 'gemini' or 'ollama'
-    geminiModel: 'gemini-3.1-flash-lite',
+    llmProvider: 'hybrid', // 'hybrid', 'gemini', or 'ollama'
+    geminiModel: 'gemini-2.5-flash-lite',
     ollamaModel: 'qwen2.5:7b',
-    ollamaUrl: 'http://100.93.91.76:11434',
+    ollamaUrl: 'http://127.0.0.1:11434',
     geminiApiKey: ''
 };
 
@@ -257,7 +257,12 @@ class AlwaysOnMemoryAgentPlugin extends obsidian.Plugin {
         new obsidian.Notice('Starting Always-On Memory Agent...');
         this.updateStatus('Starting...', true);
 
-        try {
+            const isHybrid = this.settings.llmProvider === 'hybrid';
+            const isOllama = this.settings.llmProvider === 'ollama';
+            const localModel = `litellm:ollama/${this.settings.ollamaModel || 'qwen2.5:7b'}`;
+            const cloudModel = this.settings.geminiModel || 'gemini-2.5-flash-lite';
+            const ollamaBase = this.settings.ollamaUrl || 'http://127.0.0.1:11434';
+
             this.agentProcess = child_process.spawn(pythonCmd, [scriptPath], {
                 cwd: projectDir,
                 detached: false,
@@ -265,10 +270,14 @@ class AlwaysOnMemoryAgentPlugin extends obsidian.Plugin {
                     ...process.env, 
                     PYTHONIOENCODING: 'utf-8',
                     GEMINI_API_KEY: geminiApiKey,
-                    MODEL: this.settings.llmProvider === 'ollama' 
-                        ? `litellm:ollama/${this.settings.ollamaModel || 'gemma3:4b'}` 
-                        : (this.settings.geminiModel || 'gemini-3.5-flash-lite'),
-                    OLLAMA_API_BASE: this.settings.ollamaUrl || 'http://100.93.91.76:11434'
+                    LLM_PROVIDER: this.settings.llmProvider || 'hybrid',
+                    LOCAL_MODEL: localModel,
+                    CLOUD_MODEL: cloudModel,
+                    INGEST_MODEL: isOllama || isHybrid ? localModel : cloudModel,
+                    CONSOLIDATE_MODEL: isOllama || isHybrid ? localModel : cloudModel,
+                    QUERY_MODEL: isOllama ? localModel : cloudModel,
+                    MODEL: isOllama ? localModel : cloudModel,
+                    OLLAMA_API_BASE: ollamaBase
                 }
             });
 
@@ -362,14 +371,28 @@ class AlwaysOnMemoryAgentPlugin extends obsidian.Plugin {
     syncEnvFile() {
         try {
             const vaultPath = this.app.vault.adapter.getBasePath();
-            const activeModel = this.settings.llmProvider === 'ollama'
-                ? `litellm:ollama/${this.settings.ollamaModel || 'gemma3:4b'}`
-                : (this.settings.geminiModel || 'gemini-3.1-flash-lite');
-
+            const provider = this.settings.llmProvider || 'hybrid';
+            const localModel = `litellm:ollama/${this.settings.ollamaModel || 'qwen2.5:7b'}`;
+            const cloudModel = this.settings.geminiModel || 'gemini-2.5-flash-lite';
             const ollamaBase = this.settings.ollamaUrl || 'http://127.0.0.1:11434';
             const apiKey = this.settings.geminiApiKey || '';
 
-            const envContent = `GEMINI_API_KEY=${apiKey}\nMODEL=${activeModel}\nOLLAMA_API_BASE=${ollamaBase}\nMEMORY_DB=memory.db\n`;
+            const ingestModel = provider === 'gemini' ? cloudModel : localModel;
+            const consolidateModel = provider === 'gemini' ? cloudModel : localModel;
+            const queryModel = provider === 'ollama' ? localModel : cloudModel;
+
+            const envContent = [
+                `GEMINI_API_KEY=${apiKey}`,
+                `LLM_PROVIDER=${provider}`,
+                `INGEST_MODEL=${ingestModel}`,
+                `CONSOLIDATE_MODEL=${consolidateModel}`,
+                `QUERY_MODEL=${queryModel}`,
+                `LOCAL_MODEL=${localModel}`,
+                `CLOUD_MODEL=${cloudModel}`,
+                `OLLAMA_API_BASE=${ollamaBase}`,
+                `MEMORY_DB=memory.db`,
+                ''
+            ].join('\n');
 
             const envPaths = [
                 path.join(vaultPath, '04_Projects', 'always-on-memory-agent', '.env'),
@@ -438,36 +461,40 @@ class AlwaysOnMemoryAgentSettingTab extends obsidian.PluginSettingTab {
                 }));
 
         // LLM Provider & Model Configuration Section
-        containerEl.createEl('h3', { text: '🤖 LLM Provider & Model Configuration' });
+        containerEl.createEl('h3', { text: '🤖 LLM Provider & Compute Orchestration' });
 
         new obsidian.Setting(containerEl)
-            .setName('LLM Provider')
-            .setDesc('Choose whether to run on hosted Gemini API or local Ollama.')
+            .setName('LLM Architecture Mode')
+            .setDesc('Hybrid routes 24/7 background ingest/consolidation to local Ollama ($0) and user search queries to fast Gemini Flash-Lite (Free Tier).')
             .addDropdown(dropdown => dropdown
-                .addOption('gemini', 'Google Gemini API (Cloud)')
-                .addOption('ollama', 'Ollama (Local Instance)')
-                .setValue(this.plugin.settings.llmProvider)
+                .addOption('hybrid', 'Hybrid (Ollama Background + Gemini Queries) [Recommended]')
+                .addOption('ollama', 'Ollama Only (100% Local Compute $0)')
+                .addOption('gemini', 'Google Gemini API (Cloud Only)')
+                .setValue(this.plugin.settings.llmProvider || 'hybrid')
                 .onChange(async (value) => {
                     this.plugin.settings.llmProvider = value;
                     await this.plugin.saveSettings();
-                    new obsidian.Notice(`LLM Provider set to: ${value.toUpperCase()}. If agent is running, restart agent to apply.`);
+                    new obsidian.Notice(`Architecture set to: ${value.toUpperCase()}. Please restart the agent service to apply.`);
                     this.display();
                 }));
 
-        if (this.plugin.settings.llmProvider === 'gemini') {
-            const geminiPresetOptions = ['gemini-3.5-flash-lite', 'gemini-3.5-flash', 'gemini-3.1-flash-lite', 'gemini-2.5-flash', 'gemini-2.5-pro'];
-            let currentGeminiVal = this.plugin.settings.geminiModel || 'gemini-3.5-flash-lite';
+        const showGemini = this.plugin.settings.llmProvider === 'gemini' || this.plugin.settings.llmProvider === 'hybrid';
+        const showOllama = this.plugin.settings.llmProvider === 'ollama' || this.plugin.settings.llmProvider === 'hybrid';
+
+        if (showGemini) {
+            containerEl.createEl('h4', { text: this.plugin.settings.llmProvider === 'hybrid' ? '⚡ Query Model (Google Gemini Cloud Free Tier)' : '☁️ Google Gemini Configuration' });
+            const geminiPresetOptions = ['gemini-2.5-flash-lite', 'gemini-2.5-flash', 'gemini-3.1-flash-lite', 'gemini-2.5-pro'];
+            let currentGeminiVal = this.plugin.settings.geminiModel || 'gemini-2.5-flash-lite';
             let isGeminiCustom = (!geminiPresetOptions.includes(currentGeminiVal) && currentGeminiVal !== '') || currentGeminiVal === 'custom';
 
             new obsidian.Setting(containerEl)
                 .setName('Gemini Model')
-                .setDesc('Select Gemini model variant.')
+                .setDesc('Select Gemini model variant for answering user queries.')
                 .addDropdown(dropdown => {
                     dropdown
-                        .addOption('gemini-3.5-flash-lite', 'Gemini 3.5 Flash-Lite (Fast & Ultra-Light)')
-                        .addOption('gemini-3.5-flash', 'Gemini 3.5 Flash')
-                        .addOption('gemini-3.1-flash-lite', 'Gemini 3.1 Flash-Lite')
+                        .addOption('gemini-2.5-flash-lite', 'Gemini 2.5 Flash-Lite (Fast & Cost-Efficient) [Recommended]')
                         .addOption('gemini-2.5-flash', 'Gemini 2.5 Flash')
+                        .addOption('gemini-3.1-flash-lite', 'Gemini 3.1 Flash-Lite')
                         .addOption('gemini-2.5-pro', 'Gemini 2.5 Pro')
                         .addOption('custom', 'Custom...');
                     dropdown.setValue(isGeminiCustom ? 'custom' : currentGeminiVal)
@@ -532,12 +559,15 @@ class AlwaysOnMemoryAgentSettingTab extends obsidian.PluginSettingTab {
                 }
                 updateBadge(geminiBadge, !!key, key ? 'Keychain: Connected' : 'Keychain: Key Missing');
             })();
-        } else {
+        }
+
+        if (showOllama) {
+            containerEl.createEl('h4', { text: this.plugin.settings.llmProvider === 'hybrid' ? '🖥️ Background Engine (Local Ollama $0)' : '🖥️ Ollama Local Instance' });
             new obsidian.Setting(containerEl)
-                .setName('Ollama Local Model')
-                .setDesc('Select or enter local Ollama model identifier.')
+                .setName('Ollama Model')
+                .setDesc('Select local model for 24/7 background note ingestion and periodic consolidation.')
                 .addDropdown(dropdown => dropdown
-                    .addOption('qwen2.5:7b', 'qwen2.5:7b (Recommended Local Model)')
+                    .addOption('qwen2.5:7b', 'qwen2.5:7b (Recommended - SOTA Function Calling)')
                     .addOption('qwen2.5-coder:7b', 'qwen2.5-coder:7b')
                     .addOption('gemma3:4b', 'gemma3:4b')
                     .addOption('llama3.2', 'llama3.2')
@@ -547,7 +577,7 @@ class AlwaysOnMemoryAgentSettingTab extends obsidian.PluginSettingTab {
                         await this.plugin.saveSettings();
                     }))
                 .addText(text => text
-                    .setPlaceholder('Or type custom model tag (e.g. gemma3:4b)...')
+                    .setPlaceholder('Or type custom model tag...')
                     .setValue(this.plugin.settings.ollamaModel)
                     .onChange(async (value) => {
                         if (value.trim()) {
@@ -557,10 +587,10 @@ class AlwaysOnMemoryAgentSettingTab extends obsidian.PluginSettingTab {
                     }));
 
             new obsidian.Setting(containerEl)
-                .setName('Ollama Server Base URL (VPN / Custom Endpoint)')
-                .setDesc('Base URL and VPN port for your Ollama instance (e.g. http://100.x.y.z:11434, http://vpn-host:11434, or http://127.0.0.1:11434).')
+                .setName('Ollama Server Base URL')
+                .setDesc('Base URL for Ollama (e.g. http://127.0.0.1:11434 for local, or http://100.x.y.z:11434 for Tailnet).')
                 .addText(text => text
-                    .setPlaceholder('e.g. http://100.64.0.1:11434 or http://127.0.0.1:11434')
+                    .setPlaceholder('e.g. http://127.0.0.1:11434')
                     .setValue(this.plugin.settings.ollamaUrl || 'http://127.0.0.1:11434')
                     .onChange(async (value) => {
                         this.plugin.settings.ollamaUrl = value.trim();
@@ -569,17 +599,13 @@ class AlwaysOnMemoryAgentSettingTab extends obsidian.PluginSettingTab {
         }
 
         // Active Configuration Display
-        const activeModelStr = this.plugin.settings.llmProvider === 'ollama'
-            ? `litellm:ollama/${this.plugin.settings.ollamaModel || 'gemma3:4b'}`
-            : (this.plugin.settings.geminiModel || 'gemini-3.1-flash-lite');
-
-        const activeEndpointStr = this.plugin.settings.llmProvider === 'ollama'
-            ? (this.plugin.settings.ollamaUrl || 'http://127.0.0.1:11434')
-            : 'Google Gemini Cloud API';
+        const activeLocal = `litellm:ollama/${this.plugin.settings.ollamaModel || 'qwen2.5:7b'}`;
+        const activeCloud = this.plugin.settings.geminiModel || 'gemini-2.5-flash-lite';
+        const summaryMode = this.plugin.settings.llmProvider || 'hybrid';
 
         new obsidian.Setting(containerEl)
-            .setName('Active Environment Summary')
-            .setDesc(`Model: ${activeModelStr} | Endpoint: ${activeEndpointStr} | .env Synced ✅`);
+            .setName('Active Routing Summary')
+            .setDesc(`Mode: ${summaryMode.toUpperCase()} | Ingestion/Consolidation: ${summaryMode === 'gemini' ? activeCloud : activeLocal} | Queries: ${summaryMode === 'ollama' ? activeLocal : activeCloud} | .env Synced ✅`);
     }
 }
 

@@ -1,8 +1,8 @@
 {
   "autoStartOnLaunch": true,
-  "llmProvider": "ollama",
-  "geminiModel": "custom",
-  "ollamaModel": "gemma3:4b",
-  "ollamaUrl": "http://100.93.91.76:11434",
+  "llmProvider": "hybrid",
+  "geminiModel": "gemini-2.5-flash-lite",
+  "ollamaModel": "qwen2.5:7b",
+  "ollamaUrl": "http://127.0.0.1:11434",
   "geminiApiKey": ""
 }
