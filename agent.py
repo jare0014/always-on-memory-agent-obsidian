@@ -64,7 +64,10 @@ CLOUD_MODEL = os.getenv("CLOUD_MODEL") or os.getenv("GEMINI_MODEL") or CLOUD_DEF
 if LLM_PROVIDER == "hybrid":
     INGEST_MODEL = os.getenv("INGEST_MODEL", LOCAL_MODEL)
     CONSOLIDATE_MODEL = os.getenv("CONSOLIDATE_MODEL", LOCAL_MODEL)
-    QUERY_MODEL = os.getenv("QUERY_MODEL", CLOUD_MODEL if GEMINI_API_KEY else LOCAL_MODEL)
+    if GEMINI_API_KEY:
+        QUERY_MODEL = os.getenv("QUERY_MODEL", CLOUD_MODEL)
+    else:
+        QUERY_MODEL = LOCAL_MODEL
 elif LLM_PROVIDER == "gemini":
     INGEST_MODEL = os.getenv("INGEST_MODEL", CLOUD_MODEL)
     CONSOLIDATE_MODEL = os.getenv("CONSOLIDATE_MODEL", CLOUD_MODEL)
@@ -906,7 +909,7 @@ class MemoryAgent:
                         return fallback_res
                 except Exception as fallback_err:
                     log.error(f"Fallback query runner failed: {fallback_err}")
-            raise e
+            # If all LLM runners failed, proceed to BM25/FTS search fallback below
 
         # If LLM returned empty or "{}" without text
         search_res = search_memories(question, limit=5)
