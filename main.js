@@ -257,6 +257,7 @@ class AlwaysOnMemoryAgentPlugin extends obsidian.Plugin {
         new obsidian.Notice('Starting Always-On Memory Agent...');
         this.updateStatus('Starting...', true);
 
+        try {
             const isHybrid = this.settings.llmProvider === 'hybrid';
             const isOllama = this.settings.llmProvider === 'ollama';
             const localModel = `litellm:ollama/${this.settings.ollamaModel || 'qwen2.5:7b'}`;
